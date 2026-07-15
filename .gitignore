@@ -1,0 +1,16 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
