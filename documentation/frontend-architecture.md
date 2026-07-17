@@ -44,4 +44,4 @@ Zustand is reserved for local, cross-route interface state: navigation state, se
 3. Replace mock response types with contracts sourced from `shared/`.
 4. Add authenticated fetch transport, error normalization, pagination, mutations, and optimistic updates at the API-client boundary.
 
-Likely integration domains are organizations, agents, prompt versions, knowledge sources, calls, analytics, user management, and system health. The UI should never call a route handler or `fetch` directly from a component.
+Likely integration domains are organizations, agents, prompt versions, knowledge sources, calls, analytics, user management, and system health. Agent detail views keep local workspace state separate from mock records so tabs can evolve into independently cached domain queries. The UI should never call a route handler or `fetch` directly from a component.

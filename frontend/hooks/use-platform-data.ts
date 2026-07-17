@@ -6,3 +6,6 @@ export const platformQueryKeys = { dashboard: ['dashboard'] as const, agents: ['
 export function useDashboard() { return useQuery({ queryKey: platformQueryKeys.dashboard, queryFn: mockApi.getDashboard, staleTime: 30_000 }); }
 export function useAgents() { return useQuery({ queryKey: platformQueryKeys.agents, queryFn: mockApi.listAgents, staleTime: 30_000 }); }
 export function useKnowledgeSources() { return useQuery({ queryKey: platformQueryKeys.knowledgeSources, queryFn: mockApi.listKnowledgeSources, staleTime: 30_000 }); }
+export function useCalls() { return useQuery({ queryKey: ['calls'], queryFn: mockApi.listCalls, staleTime: 30_000 }); }
+export function useCall(id:string) { return useQuery({ queryKey: ['calls',id], queryFn: ()=>mockApi.getCall(id), staleTime: 30_000 }); }
+export function useCallPerformance() { return useQuery({ queryKey: ['calls','performance'], queryFn: mockApi.getCallPerformance, staleTime: 30_000 }); }
