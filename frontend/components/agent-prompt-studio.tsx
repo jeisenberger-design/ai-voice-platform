@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Check, ChevronRight, Clock3, Copy, GitCompareArrows, History, RotateCcw, Send, SplitSquareHorizontal } from 'lucide-react';
+import { Check, Clock3, Copy, GitCompareArrows, History, RotateCcw, Send, SplitSquareHorizontal } from 'lucide-react';
 import { Badge, Button, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 const sections=['Identity','Greeting','Conversation Rules','Knowledge Instructions','Emergency Rules','Transfer Rules','Data Collection','Output Schema'];
