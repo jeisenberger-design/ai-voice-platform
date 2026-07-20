@@ -9,3 +9,5 @@ export function useKnowledgeSources() { return useQuery({ queryKey: platformQuer
 export function useCalls() { return useQuery({ queryKey: ['calls'], queryFn: mockApi.listCalls, staleTime: 30_000 }); }
 export function useCall(id:string) { return useQuery({ queryKey: ['calls',id], queryFn: ()=>mockApi.getCall(id), staleTime: 30_000 }); }
 export function useCallPerformance() { return useQuery({ queryKey: ['calls','performance'], queryFn: mockApi.getCallPerformance, staleTime: 30_000 }); }
+export function useTools() { return useQuery({ queryKey: ['tools'], queryFn: mockApi.listTools, staleTime: 30_000 }); }
+export function useTool(id:string) { return useQuery({ queryKey: ['tools',id], queryFn: ()=>mockApi.getTool(id), staleTime: 30_000 }); }

@@ -1,5 +1,6 @@
 import { activity, agents, metrics, sources, weeklyCalls } from '@/lib/mock-data';
 import { mockCall, mockCallPerformance, mockCalls } from '@/lib/mock-calls';
+import { mockTool, mockTools } from '@/lib/mock-tools';
 
 const pause = () => new Promise((resolve) => setTimeout(resolve, 120));
 export const mockApi = {
@@ -8,5 +9,7 @@ export const mockApi = {
   async listKnowledgeSources() { await pause(); return sources; },
   listCalls: mockCalls,
   getCall: mockCall,
-  getCallPerformance: mockCallPerformance
+  getCallPerformance: mockCallPerformance,
+  listTools: mockTools,
+  getTool: mockTool
 };

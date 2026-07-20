@@ -1,1 +1,2 @@
-import AgentBuilder from '../[id]/page'; export default AgentBuilder;
+import { Construction } from 'lucide-react'; import { Card } from '@/components/ui'; import { PageHeader } from '@/components/page-header';
+export default function NewAgentPage(){return <><PageHeader title="Create agent" description="Configure a new AI voice agent for your workspace."/><Card className="grid min-h-72 place-items-center p-8 text-center"><div><Construction className="mx-auto text-muted-foreground" size={28}/><h2 className="mt-3 font-medium">Agent creation is not yet available</h2><p className="mt-1 text-sm text-muted-foreground">This flow is ready for its next product workflow.</p></div></Card></>}
