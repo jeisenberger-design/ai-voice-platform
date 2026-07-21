@@ -91,7 +91,7 @@ export type ExecutionEventPayload =
   | { type: 'node.exited'; kind: WorkflowNodeKind; label: string }
   // `invocationId` pairs invoke/return even when an async result lands turns later.
   | { type: 'tool.invoked'; toolId: string; toolName: string; inputs: Record<string, WorkflowValue>; invocationId?: string }
-  | { type: 'tool.returned'; toolId: string; toolName: string; outputs: Record<string, WorkflowValue>; invocationId?: string }
+  | { type: 'tool.returned'; toolId: string; toolName: string; outputs: Record<string, WorkflowValue>; invocationId?: string; latencyMs: number }
   | { type: 'condition.evaluated'; expression: string; result: boolean; branch?: string }
   | { type: 'state.changed'; scope: ContextScope; key: string; from?: WorkflowValue; to?: WorkflowValue }
   | { type: 'conversation.turn'; speaker: ConversationTurn['speaker']; text: string }
