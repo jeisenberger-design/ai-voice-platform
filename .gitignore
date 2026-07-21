@@ -9,6 +9,9 @@ frontend/out/
 # TypeScript incremental build info
 *.tsbuildinfo
 
+# Next.js generated type reference (regenerated per build/dev; not for VCS)
+frontend/next-env.d.ts
+
 # Local environment files
 .env
 .env.*
