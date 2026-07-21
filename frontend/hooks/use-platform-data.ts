@@ -11,3 +11,5 @@ export function useCall(id:string) { return useQuery({ queryKey: ['calls',id], q
 export function useCallPerformance() { return useQuery({ queryKey: ['calls','performance'], queryFn: mockApi.getCallPerformance, staleTime: 30_000 }); }
 export function useTools() { return useQuery({ queryKey: ['tools'], queryFn: mockApi.listTools, staleTime: 30_000 }); }
 export function useTool(id:string) { return useQuery({ queryKey: ['tools',id], queryFn: ()=>mockApi.getTool(id), staleTime: 30_000 }); }
+export function useWorkflows() { return useQuery({ queryKey: ['workflows'], queryFn: mockApi.listWorkflows, staleTime: 30_000 }); }
+export function useWorkflow(id:string) { return useQuery({ queryKey: ['workflows',id], queryFn: ()=>mockApi.getWorkflow(id), staleTime: 30_000 }); }
