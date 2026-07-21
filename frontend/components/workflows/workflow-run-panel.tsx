@@ -50,6 +50,19 @@ const eventIcon: Record<ExecutionEventType, ComponentType<{ size?: number; class
   'knowledge.requested': BookOpen,
   'knowledge.retrieved': BookOpen,
   'runtime.completed': Cpu,
+  'session.opened': Phone,
+  'session.ended': Phone,
+  'turn.started': MessageSquare,
+  'turn.partial': MessageSquare,
+  'turn.completed': MessageSquare,
+  'turn.interrupted': MessageSquare,
+  'intent.detected': Sparkles,
+  'consultation.started': GitFork,
+  'consultation.paused': GitFork,
+  'consultation.completed': GitFork,
+  'directive.issued': ArrowRight,
+  'directive.completed': ArrowRight,
+  'directive.abandoned': ArrowRight,
 };
 
 export function WorkflowRunPanel({
@@ -235,7 +248,7 @@ function renderEvent(event: ExecutionEvent) {
     case 'channel.opened':
       return (
         <span className="text-muted-foreground">
-          Channel opened <span className="font-mono text-foreground">{event.sessionId}</span> · {event.channel} · {event.provider}
+          Channel opened <span className="font-mono text-foreground">{event.channelSessionId}</span> · {event.channel} · {event.provider}
         </span>
       );
     case 'agent.started':
@@ -271,6 +284,74 @@ function renderEvent(event: ExecutionEvent) {
         <span className="text-muted-foreground">
           Runtime completed · {event.agentCalls} agent, {event.toolCalls} tool, {event.knowledgeQueries} knowledge ·{' '}
           <span className="font-mono">{event.totalLatencyMs}ms</span>
+        </span>
+      );
+    case 'session.opened':
+      return (
+        <span className="font-medium">
+          Session opened <span className="font-normal text-muted-foreground">· {event.channel} · {event.definitionVersion}</span>
+        </span>
+      );
+    case 'session.ended':
+      return (
+        <span className="font-medium">
+          Session ended <span className="font-normal text-muted-foreground">· {event.reason}</span>
+        </span>
+      );
+    case 'turn.started':
+      return (
+        <span className="text-muted-foreground">
+          <span className="text-xs uppercase tracking-wide">{event.speaker}</span> turn started
+        </span>
+      );
+    case 'turn.partial':
+      return <span className="text-muted-foreground italic">{event.text}…</span>;
+    case 'turn.completed':
+      return (
+        <span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">{event.speaker}</span> <span>{event.text}</span>
+        </span>
+      );
+    case 'turn.interrupted':
+      return (
+        <span className="text-amber-600 dark:text-amber-400">
+          Interrupted{event.partialText ? <span className="text-muted-foreground"> after “{event.partialText}”</span> : null}
+        </span>
+      );
+    case 'intent.detected':
+      return (
+        <span className="text-muted-foreground">
+          Intent <span className="font-mono text-foreground">{event.intent}</span>
+          {event.confidence !== undefined && <span className="font-mono"> ({event.confidence})</span>}
+        </span>
+      );
+    case 'consultation.started':
+      return (
+        <span className="text-muted-foreground">
+          Consulting workflow <span className="font-mono text-foreground">{event.stimulusKind}</span>
+          {event.detail && <span className="font-mono"> · {event.detail}</span>}
+        </span>
+      );
+    case 'consultation.paused':
+      return (
+        <span className="text-muted-foreground">
+          Paused at <span className="font-mono text-foreground">{event.cursorNodeId ?? 'start'}</span> · {event.reason}
+        </span>
+      );
+    case 'consultation.completed':
+      return <span className="text-muted-foreground">Consultation completed</span>;
+    case 'directive.issued':
+      return (
+        <span className="text-muted-foreground">
+          Directive <span className="font-mono text-foreground">{event.directiveKind}</span> · {event.summary}
+        </span>
+      );
+    case 'directive.completed':
+      return <span className="text-muted-foreground">Directive completed</span>;
+    case 'directive.abandoned':
+      return (
+        <span className="text-amber-600 dark:text-amber-400">
+          Directive abandoned <span className="text-muted-foreground">· {event.reason}</span>
         </span>
       );
     default:

@@ -11,7 +11,7 @@
 
 import type { Workflow, WorkflowNode } from '@/lib/mock-workflows';
 import { createInitialContext, type ContextScope, type WorkflowContext } from '@/lib/workflow-context';
-import { ExecutionRecorder, nextRunId, type ExecutionEvent } from '@/lib/workflow-events';
+import { ExecutionRecorder, nextRunId, nextSessionId, type ExecutionEvent } from '@/lib/workflow-events';
 import { projectContext, projectPath } from '@/lib/workflow-projections';
 import { executors, type ExecutionResult } from '@/lib/workflow-executors';
 import { createMockRuntime } from '@/lib/runtime/mock-runtime';
@@ -21,6 +21,7 @@ export type NodeRunStatus = 'pending' | 'active' | 'completed' | 'skipped';
 
 export type WorkflowRun = {
   runId: string;
+  sessionId: string;
   workflowId: string;
   events: readonly ExecutionEvent[];
   path: string[];
@@ -46,7 +47,10 @@ function emitStateChanges(recorder: ExecutionRecorder, prev: WorkflowContext, ne
 
 export async function simulateWorkflowRun(workflow: Workflow, runtime: PlatformRuntime = createMockRuntime()): Promise<WorkflowRun> {
   const runId = nextRunId();
-  const recorder = new ExecutionRecorder(runId);
+  // Phase 1: one run == one session. The Conversation Runtime will own session
+  // lifecycle in a later phase; the identity exists now so events are correlatable.
+  const sessionId = nextSessionId();
+  const recorder = new ExecutionRecorder(runId, sessionId);
   const nodesById = new Map<string, WorkflowNode>(workflow.nodes.map((node) => [node.id, node]));
 
   let context: WorkflowContext = createInitialContext(workflow.variables);
@@ -85,7 +89,7 @@ export async function simulateWorkflowRun(workflow: Workflow, runtime: PlatformR
     context = result.context;
 
     if (result.channel) {
-      recorder.emit({ type: 'channel.opened', sessionId: result.channel.sessionId, channel: result.channel.channel, provider: result.channel.provider }, stepOptions);
+      recorder.emit({ type: 'channel.opened', channelSessionId: result.channel.sessionId, channel: result.channel.channel, provider: result.channel.provider }, stepOptions);
     }
     if (result.agent) {
       agentCalls += 1;
@@ -149,5 +153,5 @@ export async function simulateWorkflowRun(workflow: Workflow, runtime: PlatformR
   recorder.emit({ type: 'run.completed', outcome: typeof finalContext.variables.outcome === 'string' ? finalContext.variables.outcome : undefined }, { parentEventId: runStarted.eventId });
 
   const events = recorder.list();
-  return { runId, workflowId: workflow.id, events, path: projectPath(events), finalContext };
+  return { runId, sessionId, workflowId: workflow.id, events, path: projectPath(events), finalContext };
 }
