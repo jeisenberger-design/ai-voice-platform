@@ -28,14 +28,14 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
     setRun(next);
     setActiveIndex(0);
     setRunning(true);
-    for (let i = 1; i < next.steps.length; i += 1) {
+    for (let i = 1; i < next.path.length; i += 1) {
       timers.current.push(setTimeout(() => setActiveIndex(i), i * STEP_DELAY));
     }
     timers.current.push(
       setTimeout(() => {
-        setActiveIndex(next.steps.length);
+        setActiveIndex(next.path.length);
         setRunning(false);
-      }, next.steps.length * STEP_DELAY),
+      }, next.path.length * STEP_DELAY),
     );
   };
 
