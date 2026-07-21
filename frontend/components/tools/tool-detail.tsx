@@ -86,6 +86,39 @@ export function ToolDetail({ tool }: { tool: Tool }) {
             )}
           </Card>
 
+          <Card className="overflow-hidden">
+            <div className="border-b p-5">
+              <h2 className="font-medium">Outputs</h2>
+              <p className="mt-1 text-sm text-muted-foreground">The values this tool returns into workflow state.</p>
+            </div>
+            {tool.outputs.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">This tool returns no structured output.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[480px] text-left text-sm">
+                  <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
+                    <tr>
+                      {['Name', 'Type', 'Description'].map((label) => (
+                        <th className="px-5 py-3 font-medium" key={label}>
+                          {label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tool.outputs.map((output) => (
+                      <tr className="border-b last:border-0" key={output.name}>
+                        <td className="px-5 py-3 font-medium">{output.name}</td>
+                        <td className="px-5 py-3 text-muted-foreground">{output.type}</td>
+                        <td className="px-5 py-3 text-muted-foreground">{output.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
           <ToolTester tool={tool} />
         </div>
 
