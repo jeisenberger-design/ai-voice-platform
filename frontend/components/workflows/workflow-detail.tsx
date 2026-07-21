@@ -18,16 +18,21 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [running, setRunning] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const runToken = useRef(0);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const startRun = () => {
+  const startRun = async () => {
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    const next = simulateWorkflowRun(workflow);
+    runToken.current += 1;
+    const token = runToken.current;
+    setRunning(true);
+    // The runtime boundary is async, so a reset (or a newer run) can land mid-flight.
+    const next = await simulateWorkflowRun(workflow);
+    if (runToken.current !== token) return;
     setRun(next);
     setActiveIndex(0);
-    setRunning(true);
     for (let i = 1; i < next.path.length; i += 1) {
       timers.current.push(setTimeout(() => setActiveIndex(i), i * STEP_DELAY));
     }
@@ -42,6 +47,7 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
   const resetRun = () => {
     timers.current.forEach(clearTimeout);
     timers.current = [];
+    runToken.current += 1;
     setRun(null);
     setActiveIndex(0);
     setRunning(false);

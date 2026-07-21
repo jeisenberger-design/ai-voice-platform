@@ -1,18 +1,21 @@
 // Workflow execution — produces the canonical event stream for a run.
 //
-// simulateWorkflowRun walks the graph via the NodeExecutor contract (unchanged) and
-// records an immutable ExecutionEvent stream as it goes: it diffs the context before
-// and after each executor to emit state.changed / conversation.turn events, and wraps
-// each executor's tool I/O and condition evaluations as events. The returned
-// WorkflowRun keeps `path` and `finalContext` as projections for compatibility, but the
-// events are the source of truth. A real engine emits the same schema itself.
+//   Workflow Definition → Execution Engine → Runtime Interfaces → External Providers
+//
+// simulateWorkflowRun walks the graph via the NodeExecutor contract, delegating all
+// provider work (agent turns, tool calls, knowledge retrieval, channel sessions) to an
+// injected PlatformRuntime. It records an immutable ExecutionEvent stream as it goes:
+// it diffs the context before and after each executor to emit state.changed /
+// conversation.turn events, and wraps runtime activity as events with consistent
+// identities. Swapping the mock runtime for real providers requires no change here.
 
-import { tools } from '@/lib/mock-tools';
 import type { Workflow, WorkflowNode } from '@/lib/mock-workflows';
 import { createInitialContext, type ContextScope, type WorkflowContext } from '@/lib/workflow-context';
 import { ExecutionRecorder, nextRunId, type ExecutionEvent } from '@/lib/workflow-events';
 import { projectContext, projectPath } from '@/lib/workflow-projections';
 import { executors, type ExecutionResult } from '@/lib/workflow-executors';
+import { createMockRuntime } from '@/lib/runtime/mock-runtime';
+import type { PlatformRuntime } from '@/lib/runtime/contracts';
 
 export type NodeRunStatus = 'pending' | 'active' | 'completed' | 'skipped';
 
@@ -41,7 +44,7 @@ function emitStateChanges(recorder: ExecutionRecorder, prev: WorkflowContext, ne
   }
 }
 
-export function simulateWorkflowRun(workflow: Workflow): WorkflowRun {
+export async function simulateWorkflowRun(workflow: Workflow, runtime: PlatformRuntime = createMockRuntime()): Promise<WorkflowRun> {
   const runId = nextRunId();
   const recorder = new ExecutionRecorder(runId);
   const nodesById = new Map<string, WorkflowNode>(workflow.nodes.map((node) => [node.id, node]));
@@ -56,6 +59,10 @@ export function simulateWorkflowRun(workflow: Workflow): WorkflowRun {
   let current: WorkflowNode | undefined = workflow.nodes.find((node) => node.kind === 'trigger') ?? workflow.nodes[0];
   const visited = new Set<string>();
   let stepIndex = 0;
+  let agentCalls = 0;
+  let toolCalls = 0;
+  let knowledgeQueries = 0;
+  let totalLatencyMs = 0;
 
   while (current && !visited.has(current.id)) {
     visited.add(current.id);
@@ -67,13 +74,55 @@ export function simulateWorkflowRun(workflow: Workflow): WorkflowRun {
 
     const prev = context;
     const outgoing = workflow.edges.filter((edge) => edge.source === current!.id);
-    const result: ExecutionResult = executors[current.kind]({ node: current, context: prev, outgoing });
+    const result: ExecutionResult = await executors[current.kind]({
+      node: current,
+      context: prev,
+      outgoing,
+      runtime,
+      meta: { runId, nodeId: current.id, stepId },
+      workflowId: workflow.id,
+    });
     context = result.context;
 
+    if (result.channel) {
+      recorder.emit({ type: 'channel.opened', sessionId: result.channel.sessionId, channel: result.channel.channel, provider: result.channel.provider }, stepOptions);
+    }
+    if (result.agent) {
+      agentCalls += 1;
+      totalLatencyMs += result.agent.latencyMs;
+      recorder.emit({ type: 'agent.started', agentId: result.agent.agentId, instruction: current.label }, stepOptions);
+      recorder.emit(
+        {
+          type: 'agent.responded',
+          agentId: result.agent.agentId,
+          promptVersion: result.agent.promptVersion,
+          model: result.agent.model,
+          voice: result.agent.voice,
+          text: result.agent.text,
+          latencyMs: result.agent.latencyMs,
+        },
+        { ...stepOptions, latency: result.agent.latencyMs },
+      );
+    }
+    if (result.knowledge) {
+      knowledgeQueries += 1;
+      totalLatencyMs += result.knowledge.latencyMs;
+      recorder.emit({ type: 'knowledge.requested', query: result.knowledge.query }, stepOptions);
+      recorder.emit(
+        {
+          type: 'knowledge.retrieved',
+          query: result.knowledge.query,
+          matches: result.knowledge.matches.map((match) => ({ source: match.source, snippet: match.snippet, score: match.score })),
+          latencyMs: result.knowledge.latencyMs,
+        },
+        { ...stepOptions, latency: result.knowledge.latencyMs },
+      );
+    }
     if (result.io) {
-      const toolName = tools.find((tool) => tool.id === result.io!.toolId)?.name ?? result.io.toolId;
-      recorder.emit({ type: 'tool.invoked', toolId: result.io.toolId, toolName, inputs: result.io.inputs }, stepOptions);
-      recorder.emit({ type: 'tool.returned', toolId: result.io.toolId, toolName, outputs: result.io.outputs }, { ...stepOptions, latency: 120 });
+      toolCalls += 1;
+      totalLatencyMs += result.io.latencyMs;
+      recorder.emit({ type: 'tool.invoked', toolId: result.io.toolId, toolName: result.io.toolName, inputs: result.io.inputs }, stepOptions);
+      recorder.emit({ type: 'tool.returned', toolId: result.io.toolId, toolName: result.io.toolName, outputs: result.io.outputs }, { ...stepOptions, latency: result.io.latencyMs });
     }
     for (const evaluation of result.conditionEvals ?? []) {
       recorder.emit({ type: 'condition.evaluated', expression: evaluation.expression, result: evaluation.result, branch: evaluation.branch }, stepOptions);
@@ -93,6 +142,8 @@ export function simulateWorkflowRun(workflow: Workflow): WorkflowRun {
       }
     }
   }
+
+  recorder.emit({ type: 'runtime.completed', agentCalls, toolCalls, knowledgeQueries, totalLatencyMs }, { parentEventId: runStarted.eventId });
 
   const finalContext = projectContext(recorder.list());
   recorder.emit({ type: 'run.completed', outcome: typeof finalContext.variables.outcome === 'string' ? finalContext.variables.outcome : undefined }, { parentEventId: runStarted.eventId });

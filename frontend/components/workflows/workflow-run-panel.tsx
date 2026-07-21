@@ -2,12 +2,16 @@
 import { useMemo, useState } from 'react';
 import {
   ArrowRight,
+  BookOpen,
+  Bot,
   Braces,
   CircleCheck,
   CornerDownRight,
+  Cpu,
   Flag,
   GitFork,
   MessageSquare,
+  Phone,
   Play,
   RotateCcw,
   Sparkles,
@@ -40,6 +44,12 @@ const eventIcon: Record<ExecutionEventType, ComponentType<{ size?: number; class
   'state.changed': Braces,
   'conversation.turn': MessageSquare,
   'edge.traversed': ArrowRight,
+  'channel.opened': Phone,
+  'agent.started': Bot,
+  'agent.responded': Bot,
+  'knowledge.requested': BookOpen,
+  'knowledge.retrieved': BookOpen,
+  'runtime.completed': Cpu,
 };
 
 export function WorkflowRunPanel({
@@ -63,7 +73,7 @@ export function WorkflowRunPanel({
     const finished = activeIndex >= run.path.length;
     return run.events.filter((event) => {
       if (event.type === 'run.started') return true;
-      if (event.type === 'run.completed') return finished;
+      if (event.type === 'run.completed' || event.type === 'runtime.completed') return finished;
       if (event.nodeId) return revealedNodes.has(event.nodeId);
       return true;
     });
@@ -222,6 +232,47 @@ function renderEvent(event: ExecutionEvent) {
       );
     case 'edge.traversed':
       return <span className="text-muted-foreground">→ {event.label ?? event.targetId}</span>;
+    case 'channel.opened':
+      return (
+        <span className="text-muted-foreground">
+          Channel opened <span className="font-mono text-foreground">{event.sessionId}</span> · {event.channel} · {event.provider}
+        </span>
+      );
+    case 'agent.started':
+      return (
+        <span className="text-muted-foreground">
+          Agent <span className="font-mono text-foreground">{event.agentId}</span> started
+        </span>
+      );
+    case 'agent.responded':
+      return (
+        <span className="text-muted-foreground">
+          Agent responded <span className="font-mono text-foreground">{event.promptVersion}</span> · {event.model} · {event.voice} ·{' '}
+          <span className="font-mono">{event.latencyMs}ms</span>
+        </span>
+      );
+    case 'knowledge.requested':
+      return (
+        <span className="text-muted-foreground">
+          Knowledge query <span className="font-mono text-foreground">{event.query}</span>
+        </span>
+      );
+    case 'knowledge.retrieved':
+      return (
+        <span className="text-muted-foreground">
+          Retrieved {event.matches.length} match{event.matches.length === 1 ? '' : 'es'}
+          {event.matches.length > 0 && (
+            <span className="font-mono"> ({event.matches.map((match) => `${match.source} ${match.score}`).join(', ')})</span>
+          )}
+        </span>
+      );
+    case 'runtime.completed':
+      return (
+        <span className="text-muted-foreground">
+          Runtime completed · {event.agentCalls} agent, {event.toolCalls} tool, {event.knowledgeQueries} knowledge ·{' '}
+          <span className="font-mono">{event.totalLatencyMs}ms</span>
+        </span>
+      );
     default:
       return null;
   }

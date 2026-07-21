@@ -20,7 +20,16 @@ export type ExecutionEventType =
   | 'condition.evaluated'
   | 'state.changed'
   | 'conversation.turn'
-  | 'edge.traversed';
+  | 'edge.traversed'
+  // Runtime activity (see lib/runtime/contracts.ts). `tool.invoked`/`tool.returned`
+  // already model the tool request/completion pair and are emitted by the ToolRuntime
+  // path, so no separate tool.requested/completed synonyms are introduced.
+  | 'channel.opened'
+  | 'agent.started'
+  | 'agent.responded'
+  | 'knowledge.requested'
+  | 'knowledge.retrieved'
+  | 'runtime.completed';
 
 type ContextSnapshot = {
   variables: Record<string, WorkflowValue>;
@@ -48,7 +57,13 @@ export type ExecutionEventPayload =
   | { type: 'condition.evaluated'; expression: string; result: boolean; branch?: string }
   | { type: 'state.changed'; scope: ContextScope; key: string; from?: WorkflowValue; to?: WorkflowValue }
   | { type: 'conversation.turn'; speaker: ConversationTurn['speaker']; text: string }
-  | { type: 'edge.traversed'; edgeId: string; sourceId: string; targetId: string; label?: string };
+  | { type: 'edge.traversed'; edgeId: string; sourceId: string; targetId: string; label?: string }
+  | { type: 'channel.opened'; sessionId: string; channel: string; provider: string }
+  | { type: 'agent.started'; agentId: string; instruction: string }
+  | { type: 'agent.responded'; agentId: string; promptVersion: string; model: string; voice: string; text: string; latencyMs: number }
+  | { type: 'knowledge.requested'; query: string; sources?: string[] }
+  | { type: 'knowledge.retrieved'; query: string; matches: { source: string; snippet: string; score: number }[]; latencyMs: number }
+  | { type: 'runtime.completed'; agentCalls: number; toolCalls: number; knowledgeQueries: number; totalLatencyMs: number };
 
 export type ExecutionEvent = EventIdentity & ExecutionEventPayload;
 
