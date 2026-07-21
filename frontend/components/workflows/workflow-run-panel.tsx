@@ -84,15 +84,26 @@ export function WorkflowRunPanel({
     if (!run) return [];
     const revealedNodes = new Set(run.path.slice(0, activeIndex + 1));
     const finished = activeIndex >= run.path.length;
+    // Events with no nodeId (consultation/turn/directive/intent lifecycle) belong to a
+    // consultation rather than a single node. Reveal them once any node from that same
+    // consultation has been revealed, instead of showing them immediately — otherwise
+    // they'd leak ahead of the node-by-node animation.
+    const revealedConsultations = new Set(
+      run.events.filter((event) => event.nodeId && revealedNodes.has(event.nodeId) && event.consultationId).map((event) => event.consultationId as string),
+    );
     return run.events.filter((event) => {
-      if (event.type === 'run.started') return true;
-      if (event.type === 'run.completed' || event.type === 'runtime.completed') return finished;
+      if (event.type === 'run.completed' || event.type === 'runtime.completed' || event.type === 'session.ended') return finished;
+      if (event.type === 'run.started' || event.type === 'session.opened') return true;
       if (event.nodeId) return revealedNodes.has(event.nodeId);
-      return true;
+      if (event.consultationId) return revealedConsultations.has(event.consultationId);
+      return false;
     });
   }, [run, activeIndex]);
 
-  const timeline = useMemo(() => revealed.filter((event) => event.type !== 'node.exited'), [revealed]);
+  // turn.completed intentionally duplicates conversation.turn's content (see
+  // conversation-runtime.ts) — it exists for projections, not as a second transcript
+  // line, so it's hidden here the same way node.exited is.
+  const timeline = useMemo(() => revealed.filter((event) => event.type !== 'node.exited' && event.type !== 'turn.completed'), [revealed]);
   const transitions = useMemo(() => projectStateTransitions(revealed), [revealed]);
   const toolCalls = useMemo(() => projectToolCalls(revealed), [revealed]);
   const conversation = useMemo(() => projectConversation(revealed), [revealed]);

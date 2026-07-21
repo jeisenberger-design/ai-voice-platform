@@ -1,23 +1,49 @@
-// MockConversationRuntime — phase 2 driver over consultWorkflow.
+// MockConversationRuntime — phase 3 driver over consultWorkflow.
 //
-// This is deliberately minimal: it repeatedly consults the workflow and auto-resumes
-// every wait point with a placeholder stimulus, so a full session can still run to
-// completion in one call. That preserves today's single-shot run experience while the
-// engine's primitive becomes consultation-based underneath. Nothing here models real
-// conversation behavior — no scripted caller turns, no interruption. Phase 3 replaces
-// `syntheticStimulus` with scripted, deterministic multi-turn scenarios (see
-// documentation/conversation-runtime-design.md).
+// Drives one deterministic scripted scenario per workflow: each 'agent_turn' pause is
+// resumed with a real caller line (text + optional intent) instead of phase 2's empty
+// placeholder, and support-triage's scenario demonstrates an interruption. Turn and
+// directive lifecycle events are emitted here, never by the engine, because turns are a
+// Conversation Runtime concept, not a workflow node — the engine only ever produces the
+// flat `conversation.turn` transcript line as a side effect of node execution (see
+// documentation/conversation-runtime-design.md). 'transfer'/async-tool pauses still
+// auto-resume via a system timer; scripting applies to conversational exchanges only.
 
 import type { Workflow } from '@/lib/mock-workflows';
-import type { WorkflowContext } from '@/lib/workflow-context';
-import type { Cursor, Stimulus } from '@/lib/conversation-types';
+import { appendTurn, setValue, type WorkflowContext } from '@/lib/workflow-context';
+import type { Cursor, Directive, Stimulus } from '@/lib/conversation-types';
 import { ExecutionRecorder } from '@/lib/workflow-events';
 import { consultWorkflow, type ConsultationResult } from '@/lib/workflow-consultation';
 import type { PlatformRuntime } from '@/lib/runtime/contracts';
+import { getScenario, scenarioTurn, type ScriptedTurn } from '@/lib/conversation-scenarios';
 
-// Defensive guard against a mis-modeled graph (e.g. a wait point whose resumption loops
-// back on itself) running forever in the absence of a real caller to break the cycle.
+// Defensive guard against a mis-modeled graph running forever in the absence of a real
+// caller to break the cycle.
 const MAX_CONSULTATIONS = 50;
+
+function truncateForInterruption(text: string): string {
+  const sentenceEnd = text.search(/[.!?]/);
+  if (sentenceEnd > 0 && sentenceEnd < 60) return text.slice(0, sentenceEnd + 1);
+  if (text.length <= 8) return text;
+  return `${text.slice(0, Math.ceil(text.length * 0.6))}…`;
+}
+
+function directiveSummary(directive: Directive): string {
+  switch (directive.kind) {
+    case 'speak':
+      return directive.text;
+    case 'listen':
+      return directive.expecting?.join(', ') ?? 'awaiting caller';
+    case 'invoke_tool':
+      return directive.toolId;
+    case 'transfer':
+      return directive.target;
+    case 'end':
+      return directive.reason;
+    default:
+      return '';
+  }
+}
 
 export class MockConversationRuntime {
   constructor(
@@ -27,12 +53,19 @@ export class MockConversationRuntime {
     private readonly runId: string,
   ) {}
 
-  /** Drives consultations to completion, auto-resuming every pause. */
+  /** Drives consultations to completion, resuming each pause per the workflow's scripted scenario. */
   async run(initialContext: WorkflowContext, runStartedEventId: string): Promise<{ context: WorkflowContext }> {
+    const scenario = getScenario(this.workflow.id);
+    const opened = this.recorder.emit(
+      { type: 'session.opened', workflowId: this.workflow.id, definitionVersion: `v${this.workflow.version}`, channel: 'voice', provider: 'mock-channel' },
+      { parentEventId: runStartedEventId },
+    );
+
     let context = initialContext;
     let cursor: Cursor = { nodeId: null };
     let stimulus: Stimulus = { kind: 'session.start' };
-    let causeEventId = runStartedEventId;
+    let causeEventId = opened.eventId;
+    let scriptIndex = 0;
 
     for (let index = 0; index < MAX_CONSULTATIONS; index += 1) {
       const consultationId = `${this.runId}-c${index.toString().padStart(2, '0')}`;
@@ -48,24 +81,72 @@ export class MockConversationRuntime {
         causeEventId,
       });
       context = result.context;
-      if (result.status === 'completed') return { context };
 
-      // The prior pause becomes this resumption's cause — a real causal chain, not a
-      // synthesized one, since consultation.paused already carries the cursor.
+      const nextIsInterrupting = result.status === 'paused' && result.waitReason === 'agent_turn' && scenarioTurn(scenario, scriptIndex).interrupts === true;
+      this.processDirectives(result.directives, consultationId, nextIsInterrupting);
+
+      if (result.status === 'completed') break;
+
       const paused = result.events.find((event) => event.type === 'consultation.paused');
       causeEventId = paused?.eventId ?? causeEventId;
       cursor = result.cursor;
-      stimulus = this.syntheticStimulus(result, consultationId);
+
+      if (result.waitReason === 'agent_turn') {
+        const scripted = scenarioTurn(scenario, scriptIndex);
+        scriptIndex += 1;
+        context = this.recordCallerTurn(context, scripted, consultationId);
+        stimulus = scripted.text
+          ? { kind: 'caller.turn', turnId: `${consultationId}-caller`, text: scripted.text, intent: scripted.intent }
+          : { kind: 'timer', timerId: `${consultationId}-auto` };
+      } else {
+        // 'transfer' and the future 'async_tool' have no scripted caller response to
+        // react to — a system timer stands in for "resume now".
+        stimulus = { kind: 'timer', timerId: `${consultationId}-auto` };
+      }
     }
+
+    this.recorder.emit({ type: 'session.ended', reason: 'completed' }, { parentEventId: opened.eventId });
     return { context };
   }
 
-  private syntheticStimulus(result: ConsultationResult, consultationId: string): Stimulus {
-    if (result.waitReason === 'agent_turn') {
-      return { kind: 'caller.turn', turnId: `${consultationId}-auto`, text: '' };
+  /**
+   * Every directive the just-finished consultation produced gets a issued/completed
+   * pair, except an interruptible `speak` when the upcoming scripted turn interrupts —
+   * that one is abandoned instead, and the agent's turn (already recorded via
+   * `conversation.turn` by the engine) is annotated as cut off.
+   */
+  private processDirectives(directives: Directive[], consultationId: string, interruptSpeak: boolean) {
+    directives.forEach((directive, index) => {
+      const directiveId = `${consultationId}-d${index}`;
+      this.recorder.emit({ type: 'directive.issued', directiveId, directiveKind: directive.kind, summary: directiveSummary(directive) }, { consultationId });
+
+      if (interruptSpeak && directive.kind === 'speak' && directive.interruptible) {
+        this.recorder.emit({ type: 'directive.abandoned', directiveId, reason: 'Interrupted by caller' }, { consultationId });
+        this.recorder.emit({ type: 'turn.interrupted', partialText: truncateForInterruption(directive.text) }, { consultationId });
+      } else {
+        this.recorder.emit({ type: 'directive.completed', directiveId }, { consultationId });
+      }
+    });
+  }
+
+  /**
+   * Caller turns aren't produced by any node executor, so this is the only place that
+   * appends one to context — mirroring what the engine does for agent/system turns —
+   * and it's also the only place `detected_intent` is set, so the `state.changed` event
+   * is emitted manually to keep `fold(events) === context` holding.
+   */
+  private recordCallerTurn(context: WorkflowContext, scripted: ScriptedTurn, consultationId: string): WorkflowContext {
+    if (!scripted.text) return context;
+    let next = appendTurn(context, { speaker: 'caller', text: scripted.text });
+    this.recorder.emit({ type: 'conversation.turn', speaker: 'caller', text: scripted.text }, { consultationId });
+    this.recorder.emit({ type: 'turn.completed', speaker: 'caller', text: scripted.text }, { consultationId });
+
+    if (scripted.intent) {
+      this.recorder.emit({ type: 'intent.detected', intent: scripted.intent }, { consultationId });
+      const from = next.metadata.detected_intent;
+      next = setValue(next, { scope: 'metadata', key: 'detected_intent' }, scripted.intent);
+      this.recorder.emit({ type: 'state.changed', scope: 'metadata', key: 'detected_intent', from, to: scripted.intent }, { consultationId });
     }
-    // Covers 'transfer' and the future 'async_tool' — neither has a scripted caller
-    // response to react to yet, so a generic system timer stands in for "resume now".
-    return { kind: 'timer', timerId: `${consultationId}-auto` };
+    return next;
   }
 }
