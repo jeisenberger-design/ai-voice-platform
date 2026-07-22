@@ -137,15 +137,22 @@ returned `directives` (`directive.issued` → `completed`, or `abandoned` +
 `lib/conversation-types.ts` declares the target session/turn domain model
 (`ConversationSession`, `ConversationTurn`, `Stimulus`, `Directive`, `Cursor`) per the
 design doc. **Status: `Stimulus`/`Directive`/`Cursor` are live and load-bearing.
-`ConversationSession`/`ConversationTurn` are declared but not yet instantiated or
-projected anywhere** — today the runtime emits `session.opened`/`turn.completed`
-etc. directly as events; a `projectSession`/`projectTurns` read model that assembles
-those typed records doesn't exist yet. Don't assume they're populated.
+`ConversationTurn` is now projected** — `projectTurns` (`workflow-projections.ts`)
+folds `conversation.turn`/`turn.interrupted`/`directive.abandoned`/`intent.detected`
+into it, correlating decorating events to the turn open in the same consultation
+(there's no turn-identity correlator yet — see below). **`ConversationSession` is
+still declared but not instantiated or projected anywhere**; a `projectSession` read
+model doesn't exist yet.
 
 This `ConversationTurn` is the only one — `workflow-context.ts`'s simpler
 `{ speaker, text }` shape (used for the flat transcript in `WorkflowContext.conversation`
 and `projectConversation`) is named `TranscriptLine`, specifically to avoid colliding
 with this canonical type.
+
+Two of `ConversationTurn`'s fields are optional because nothing populates them yet:
+`turnId` (no emitter assigns one — events correlate by `consultationId` instead) and
+`origin` (only `turn.started` carries it, and `turn.started` itself is never emitted;
+`conversation.turn` is the only anchor that fires in practice today).
 
 Turn/directive/session lifecycle events are emitted **only** by the Conversation
 Runtime, never by an executor — turns are not workflow nodes, and the engine never
@@ -254,7 +261,10 @@ it matters before persistence, multi-tenancy, or a real provider integration.
 
 Conversation Runtime phases 1–3 are done: event identities + session/turn concepts,
 consultation-based execution, scripted multi-turn scenarios with one interruption
-case. Phase 4 (projections/UI — a Turns tab, transcript-from-turn-events,
-`invocationId`-based tool-call pairing) has not started. Explicitly not started by
-design, and not to be started without a fresh scoping pass: a graph-authoring/editing
-canvas, real voice streaming, backend persistence, multi-tenant infrastructure.
+case. Phase 4's projection half is started: `projectTurns` exists and is tested
+(`workflow-projections.test.ts`, the first test suite in this repo — see the `test`
+script and `vitest.config.ts`), but it is **not wired into any component** — no Turns
+tab, no transcript-from-turn-events UI. `invocationId`-based tool-call pairing (for
+when tools stop being purely synchronous) also hasn't started. Explicitly not started
+by design, and not to be started without a fresh scoping pass: a graph-authoring/
+editing canvas, real voice streaming, backend persistence, multi-tenant infrastructure.

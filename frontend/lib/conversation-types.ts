@@ -35,16 +35,24 @@ export type TurnOrigin = 'speech' | 'policy' | 'system';
 export type TurnStatus = 'in_progress' | 'completed' | 'interrupted' | 'abandoned';
 
 export type ConversationTurn = {
-  turnId: string;
+  // Optional because no emitter assigns a turnId today (see projectTurns in
+  // workflow-projections.ts) — real once turn.started/turn.completed carry one.
+  turnId?: string;
   sessionId: string;
   seq: number;
+  /** Anchor event's simulated clock (ms since run start) — mirrors StateTransition/ToolCall. */
+  t: number;
   speaker: TurnSpeaker;
-  origin: TurnOrigin;
+  // Optional because only turn.started (never emitted yet) carries origin.
+  origin?: TurnOrigin;
   status: TurnStatus;
   text?: string;
   /** What was actually delivered before an interruption cut the turn short. */
   partialText?: string;
   interruptedBy?: string;
+  /** From intent.detected, when one was attached to this turn. */
+  intent?: string;
+  intentConfidence?: number;
 };
 
 /* ------------------------------------------------- Consultation seam (engine) -- */

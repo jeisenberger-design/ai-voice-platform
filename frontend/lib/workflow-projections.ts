@@ -2,12 +2,14 @@
 //
 // Every read model the UI needs is a pure function of the same immutable events —
 // there are no parallel data structures to keep in sync. Timeline is the raw ordered
-// stream; State, Tool Calls, and Conversation are the projections below; run state
-// (path, context) is likewise derived. Future Analytics is just another projection.
+// stream; State, Tool Calls, Conversation, and Turns are the projections below; run
+// state (path, context) is likewise derived. Future Analytics is just another
+// projection.
 
 import type { TranscriptLine, WorkflowContext, WorkflowValue } from '@/lib/workflow-context';
 import type { ContextScope } from '@/lib/workflow-context';
 import type { ExecutionEvent } from '@/lib/workflow-events';
+import type { ConversationTurn } from '@/lib/conversation-types';
 
 export type StateTransition = { seq: number; t: number; nodeId?: string; scope: ContextScope; key: string; from?: WorkflowValue; to?: WorkflowValue };
 export type ToolCall = { stepId?: string; nodeId?: string; t: number; toolId: string; toolName: string; inputs: Record<string, WorkflowValue>; outputs?: Record<string, WorkflowValue> };
@@ -72,4 +74,49 @@ export function projectConversation(events: readonly ExecutionEvent[]): Transcri
       const turn = event as Extract<ExecutionEvent, { type: 'conversation.turn' }>;
       return { speaker: turn.speaker, text: turn.text };
     });
+}
+
+/**
+ * Folds turn-lifecycle events into ConversationTurn records. `conversation.turn` is
+ * the anchor — the only event guaranteed to fire once per turn today (turn.started
+ * never fires; handled below only for forward compatibility, opening its own turn
+ * rather than guessing it merges with a later conversation.turn, since there's no real
+ * data yet to verify that against). Decorating events (interruption, completion,
+ * intent) attach to the turn opened most recently within the same consultation;
+ * `directive.abandoned` and `turn.completed` carry no turn/speaker link of their own,
+ * so they can only corroborate the currently open turn, never assert one
+ * independently. `turn.partial` is deliberately not handled — it's ephemeral streaming
+ * data, not part of the canonical turn record, and isn't emitted today either.
+ */
+export function projectTurns(events: readonly ExecutionEvent[]): ConversationTurn[] {
+  const turns: ConversationTurn[] = [];
+  let current: ConversationTurn | null = null;
+  let currentConsultationId: string | undefined;
+
+  for (const event of events) {
+    const sameConsultation = current !== null && typeof currentConsultationId === 'string' && event.consultationId === currentConsultationId;
+
+    if (event.type === 'turn.started') {
+      current = { sessionId: event.sessionId, seq: event.seq, t: event.t, speaker: event.speaker, origin: event.origin, status: 'in_progress', turnId: event.turnId };
+      currentConsultationId = event.consultationId;
+      turns.push(current);
+    } else if (event.type === 'conversation.turn') {
+      current = { sessionId: event.sessionId, seq: event.seq, t: event.t, speaker: event.speaker, text: event.text, status: 'completed', turnId: event.turnId };
+      currentConsultationId = event.consultationId;
+      turns.push(current);
+    } else if (event.type === 'turn.interrupted' && sameConsultation && current) {
+      current.status = 'interrupted';
+      current.partialText = event.partialText;
+      current.interruptedBy = event.interruptedBy;
+    } else if (event.type === 'directive.abandoned' && sameConsultation && current) {
+      current.status = 'interrupted';
+    } else if (event.type === 'turn.completed' && sameConsultation && current && current.speaker === event.speaker) {
+      if (current.status !== 'interrupted') current.status = 'completed';
+    } else if (event.type === 'intent.detected' && sameConsultation && current) {
+      current.intent = event.intent;
+      current.intentConfidence = event.confidence;
+    }
+  }
+
+  return turns;
 }
