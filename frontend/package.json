@@ -2,6 +2,7 @@
   "name": "voice-platform-frontend",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@11.9.0",
   "scripts": { "dev": "next dev", "build": "next build", "lint": "eslint .", "start": "next start", "typecheck": "tsc --noEmit", "format": "prettier --write .", "format:check": "prettier --check ." },
   "dependencies": {
     "@tanstack/react-query": "^5.66.8",
