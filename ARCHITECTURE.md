@@ -142,6 +142,11 @@ projected anywhere** — today the runtime emits `session.opened`/`turn.complete
 etc. directly as events; a `projectSession`/`projectTurns` read model that assembles
 those typed records doesn't exist yet. Don't assume they're populated.
 
+This `ConversationTurn` is the only one — `workflow-context.ts`'s simpler
+`{ speaker, text }` shape (used for the flat transcript in `WorkflowContext.conversation`
+and `projectConversation`) is named `TranscriptLine`, specifically to avoid colliding
+with this canonical type.
+
 Turn/directive/session lifecycle events are emitted **only** by the Conversation
 Runtime, never by an executor — turns are not workflow nodes, and the engine never
 creates one. The engine's own `conversation.turn` emission (via `appendTurn` inside an

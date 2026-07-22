@@ -7,7 +7,7 @@
 // and nested workflows (parentEventId across runs). The stream is append-only and is
 // never mutated after emission.
 
-import type { ContextScope, ConversationTurn, WorkflowValue } from '@/lib/workflow-context';
+import type { ContextScope, TranscriptLine, WorkflowValue } from '@/lib/workflow-context';
 import type { WorkflowNodeKind } from '@/lib/mock-workflows';
 import type { ChannelKind, Directive, SessionEndReason, Stimulus, TurnOrigin, TurnSpeaker } from '@/lib/conversation-types';
 
@@ -94,7 +94,7 @@ export type ExecutionEventPayload =
   | { type: 'tool.returned'; toolId: string; toolName: string; outputs: Record<string, WorkflowValue>; invocationId?: string; latencyMs: number }
   | { type: 'condition.evaluated'; expression: string; result: boolean; branch?: string }
   | { type: 'state.changed'; scope: ContextScope; key: string; from?: WorkflowValue; to?: WorkflowValue }
-  | { type: 'conversation.turn'; speaker: ConversationTurn['speaker']; text: string }
+  | { type: 'conversation.turn'; speaker: TranscriptLine['speaker']; text: string }
   | { type: 'edge.traversed'; edgeId: string; sourceId: string; targetId: string; label?: string }
   | { type: 'channel.opened'; channelSessionId: string; channel: string; provider: string }
   | { type: 'agent.started'; agentId: string; instruction: string }

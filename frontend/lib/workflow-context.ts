@@ -11,13 +11,16 @@ export type ContextScope = 'variables' | 'session' | 'metadata';
 export type VarRef = { scope: ContextScope; key: string };
 export type Operand = { kind: 'ref'; ref: VarRef } | { kind: 'literal'; value: WorkflowValue };
 
-export type ConversationTurn = { speaker: 'agent' | 'caller' | 'system'; text: string };
+// A single transcript entry — not a conversation-lifecycle object. The canonical
+// ConversationTurn (turnId, status, interruption, etc.) lives in conversation-types.ts;
+// this is deliberately simpler and named to avoid colliding with it.
+export type TranscriptLine = { speaker: 'agent' | 'caller' | 'system'; text: string };
 
 export type WorkflowContext = {
   // Workflow-declared, mutable state that flows between nodes.
   variables: Record<string, WorkflowValue>;
-  // Ordered dialogue turns accumulated during the run.
-  conversation: ConversationTurn[];
+  // Ordered dialogue transcript accumulated during the run.
+  conversation: TranscriptLine[];
   // Call identity and channel metadata, seeded at the trigger.
   session: Record<string, WorkflowValue>;
   // Run bookkeeping (e.g. the last decision taken).
@@ -46,7 +49,7 @@ export function setValue(context: WorkflowContext, ref: VarRef, value: WorkflowV
   return { ...context, [ref.scope]: { ...context[ref.scope], [ref.key]: value } };
 }
 
-export function appendTurn(context: WorkflowContext, turn: ConversationTurn): WorkflowContext {
+export function appendTurn(context: WorkflowContext, turn: TranscriptLine): WorkflowContext {
   return { ...context, conversation: [...context.conversation, turn] };
 }
 

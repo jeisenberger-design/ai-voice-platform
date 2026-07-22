@@ -5,7 +5,7 @@
 // stream; State, Tool Calls, and Conversation are the projections below; run state
 // (path, context) is likewise derived. Future Analytics is just another projection.
 
-import type { ConversationTurn, WorkflowContext, WorkflowValue } from '@/lib/workflow-context';
+import type { TranscriptLine, WorkflowContext, WorkflowValue } from '@/lib/workflow-context';
 import type { ContextScope } from '@/lib/workflow-context';
 import type { ExecutionEvent } from '@/lib/workflow-events';
 
@@ -65,7 +65,7 @@ export function projectToolCalls(events: readonly ExecutionEvent[]): ToolCall[] 
   return order.map((key) => byStep.get(key) as ToolCall);
 }
 
-export function projectConversation(events: readonly ExecutionEvent[]): ConversationTurn[] {
+export function projectConversation(events: readonly ExecutionEvent[]): TranscriptLine[] {
   return events
     .filter((event) => event.type === 'conversation.turn')
     .map((event) => {
