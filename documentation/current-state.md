@@ -1,38 +1,57 @@
 # Current product state
 
-## Phase 1C completed — Calls Intelligence Workspace
+A status snapshot of what exists in the repository — what is built, what is still mock,
+and what is deliberately not built yet. For *how* any of it works, see
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) (the source of truth); this file does not
+re-describe mechanics. For the Conversation Runtime's design and phasing, see
+[`conversation-runtime-design.md`](conversation-runtime-design.md).
 
-The frontend now includes a complete mock-data call operations experience. It remains frontend-only: no API routes, persistence, recordings, or telephony services have been introduced.
+Still frontend-only: no backend services, API routes, persistence, authentication,
+telephony, or real model/voice providers exist. Everything below runs in the browser
+against typed fixtures and a mock runtime.
 
-### New pages
+## What exists today
 
-- `/calls` provides performance metrics, agent comparison, intent analysis, call search, filters, and an operational call table.
-- `/calls/[id]` provides a detailed call-review workspace with header metrics, searchable transcript, event timeline, extracted structured data, and quality evaluation.
+- **Platform shell** — Next.js App Router application, sidebar navigation, theme,
+  responsive layout. Routes: dashboard, agents (list / detail / new), prompt studio,
+  knowledge, tools (list / detail), workflows (list / detail), analytics, calls
+  (list / detail), plus placeholder sections.
+- **Agents** — agent model with `promptVersion` + `model` fields, list and detail
+  workspaces, prompt studio, structured editor, a local testing panel, and validation.
+- **Tools** — registry with typed inputs *and* outputs and a deterministic mock result
+  per tool; list and detail views.
+- **Knowledge** — knowledge-source concepts and listing (retrieval is served through
+  the runtime layer, not a real index).
+- **Workflows** — a directed-graph definition model (typed nodes, edges, input/output
+  bindings, structured predicates), list and detail views, and a **read-only** execution
+  graph.
+- **Execution & observability** — a consultation-based execution engine, a typed
+  `WorkflowContext`, structured-predicate evaluation, a stable `NodeExecutor` contract,
+  an immutable `ExecutionEvent` stream as the canonical run record, and projection-based
+  read models surfaced as a tabbed run panel (Timeline / State / Tool Calls /
+  Conversation). See `ARCHITECTURE.md`.
+- **Runtime abstraction** — four async provider contracts (Agent / Tool / Knowledge /
+  Channel) with deterministic mock implementations; the mocks are the only fixture
+  readers in the execution path. See `ARCHITECTURE.md`.
+- **Conversation Runtime** — phases 1–3 complete: session/turn concepts and event
+  identities, consultation-based execution with cursor resumption, and a
+  `MockConversationRuntime` that drives scripted multi-turn scenarios including one
+  interruption case. Phase 4 (a turns projection / UI) is not started. See
+  `conversation-runtime-design.md`.
+- **Calls Intelligence** — the original mock call-operations experience: `/calls`
+  performance/search/table and `/calls/[id]` transcript, timeline, extracted data, and
+  quality evaluation, backed by `lib/mock-calls.ts`.
 
-### Components added
+## Not built yet (by design)
 
-- `components/calls/call-filters.tsx`
-- `components/calls/call-table.tsx`
-- `components/calls/call-detail.tsx`
-- `components/calls/transcript-viewer.tsx`
-- `components/calls/call-timeline.tsx`
-- `components/calls/extracted-data-panel.tsx`
-- `components/calls/quality-score-card.tsx`
-- `components/calls/performance-dashboard.tsx`
+Backend services and API routes, persistence and run replay storage, authentication and
+multi-tenant isolation, real LLM/voice provider integrations, telephony/voice streaming,
+and any graph-authoring/editing UI. These are sequenced behind the current mock-first
+work; see the roadmap and known-debt sections of `ARCHITECTURE.md`.
 
-### Mock data and state
+## Tooling & repository
 
-`lib/mock-calls.ts` defines typed call records with caller information, outcomes, transcript segments, timeline events, extracted fields, cost estimates, and quality evaluation results. It exports `mockCalls`, `mockCall`, and `mockCallPerformance`, which form the replacement point for a future API client.
-
-`stores/calls-store.ts` owns presentation filters, while React Query hooks in `hooks/use-platform-data.ts` cache the server-shaped mock records.
-
-### Future backend API requirements
-
-The expected integration boundary is:
-
-- `GET /api/calls` for paginated calls and supported filter facets.
-- `GET /api/calls/:id` for transcript, events, extracted data, cost, and quality results.
-- `GET /api/calls/performance` for aggregate metrics, agent comparison, and intent analysis.
-- Future evaluator jobs may provide detailed quality rubrics, retriable evaluation state, and human-review overrides.
-
-All UI components are designed to retain their current query and prop boundaries when these mock service functions are replaced.
+- Lint / typecheck / build are the definition-of-done gate for any change (run in
+  `frontend/`).
+- GitHub Actions CI runs that gate on every push/PR to `master`.
+- The repository has a GitHub remote; `master` is the working branch.
