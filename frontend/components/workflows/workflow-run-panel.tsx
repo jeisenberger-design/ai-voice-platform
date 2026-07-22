@@ -21,11 +21,11 @@ import type { ComponentType } from 'react';
 import { Badge, Button, Card } from '@/components/ui';
 import { formatValue, type WorkflowValue } from '@/lib/workflow-context';
 import type { ExecutionEvent, ExecutionEventType } from '@/lib/workflow-events';
-import { projectConversation, projectStateTransitions, projectToolCalls } from '@/lib/workflow-projections';
+import { projectConversation, projectStateTransitions, projectToolCalls, projectTurns } from '@/lib/workflow-projections';
 import type { WorkflowRun } from '@/lib/workflow-execution';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'timeline' | 'state' | 'tools' | 'conversation';
+type TabKey = 'timeline' | 'state' | 'tools' | 'conversation' | 'turns';
 
 const formatTime = (t: number) => (t < 1000 ? `${t}ms` : `${(t / 1000).toFixed(2)}s`);
 const pairs = (entries: Record<string, WorkflowValue>) =>
@@ -107,12 +107,14 @@ export function WorkflowRunPanel({
   const transitions = useMemo(() => projectStateTransitions(revealed), [revealed]);
   const toolCalls = useMemo(() => projectToolCalls(revealed), [revealed]);
   const conversation = useMemo(() => projectConversation(revealed), [revealed]);
+  const turns = useMemo(() => projectTurns(revealed), [revealed]);
 
   const tabs: { key: TabKey; label: string; count: number }[] = [
     { key: 'timeline', label: 'Timeline', count: timeline.length },
     { key: 'state', label: 'State', count: transitions.length },
     { key: 'tools', label: 'Tool Calls', count: toolCalls.length },
     { key: 'conversation', label: 'Conversation', count: conversation.length },
+    { key: 'turns', label: 'Turns', count: turns.length },
   ];
 
   return (
@@ -171,6 +173,7 @@ export function WorkflowRunPanel({
             {tab === 'state' && <StateView transitions={transitions} />}
             {tab === 'tools' && <ToolCallsView calls={toolCalls} />}
             {tab === 'conversation' && <ConversationView turns={conversation} />}
+            {tab === 'turns' && <TurnsView turns={turns} />}
           </div>
         </>
       )}
@@ -426,5 +429,43 @@ function ConversationView({ turns }: { turns: ReturnType<typeof projectConversat
         </li>
       ))}
     </ul>
+  );
+}
+
+const turnStatusVariant: Record<ReturnType<typeof projectTurns>[number]['status'], 'neutral' | 'success' | 'warning'> = {
+  in_progress: 'neutral',
+  completed: 'success',
+  interrupted: 'warning',
+  abandoned: 'warning',
+};
+
+function TurnsView({ turns }: { turns: ReturnType<typeof projectTurns> }) {
+  if (turns.length === 0) return <EmptyHint text="No turns yet." />;
+  return (
+    <ol className="space-y-3">
+      {turns.map((turn, index) => (
+        <li key={turn.turnId ?? `${turn.seq}-${index}`} className="rounded-md border p-3 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">{turn.speaker}</span>
+              <Badge variant={turnStatusVariant[turn.status]}>{turn.status.replace('_', ' ')}</Badge>
+            </div>
+            <span className="font-mono text-xs text-muted-foreground">{formatTime(turn.t)}</span>
+          </div>
+          <p className="mt-2">
+            {turn.status === 'interrupted' && turn.partialText ? turn.partialText : (turn.text ?? <span className="text-muted-foreground">—</span>)}
+          </p>
+          {turn.status === 'interrupted' && turn.text && turn.partialText && (
+            <p className="mt-1 text-xs text-muted-foreground">Full turn: “{turn.text}”</p>
+          )}
+          {turn.intent && (
+            <p className="mt-2 font-mono text-xs text-muted-foreground">
+              intent: <span className="text-foreground">{turn.intent}</span>
+              {turn.intentConfidence !== undefined && <span> ({turn.intentConfidence})</span>}
+            </p>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }
