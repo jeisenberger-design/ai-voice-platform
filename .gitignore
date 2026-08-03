@@ -20,3 +20,7 @@ frontend/next-env.d.ts
 # Editor and OS files
 .DS_Store
 Thumbs.db
+
+# Local Claude Code configuration (machine-specific)
+.claude/settings.local.json
+.claude/launch.json
