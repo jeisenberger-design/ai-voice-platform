@@ -9,7 +9,15 @@
 
 import type { ContextScope, TranscriptLine, WorkflowValue } from '@/lib/workflow-context';
 import type { WorkflowNodeKind } from '@/lib/mock-workflows';
-import type { ChannelKind, Directive, SessionEndReason, Stimulus, TurnOrigin, TurnSpeaker } from '@/lib/conversation-types';
+import type {
+  ChannelKind,
+  ConsultationOutcome,
+  Directive,
+  SessionEndReason,
+  Stimulus,
+  TurnOrigin,
+  TurnSpeaker,
+} from '@/lib/conversation-types';
 
 export type ExecutionEventType =
   | 'run.started'
@@ -90,20 +98,66 @@ export type ExecutionEventPayload =
   | { type: 'node.entered'; kind: WorkflowNodeKind; label: string }
   | { type: 'node.exited'; kind: WorkflowNodeKind; label: string }
   // `invocationId` pairs invoke/return even when an async result lands turns later.
-  | { type: 'tool.invoked'; toolId: string; toolName: string; inputs: Record<string, WorkflowValue>; invocationId?: string }
-  | { type: 'tool.returned'; toolId: string; toolName: string; outputs: Record<string, WorkflowValue>; invocationId?: string; latencyMs: number }
+  | {
+      type: 'tool.invoked';
+      toolId: string;
+      toolName: string;
+      inputs: Record<string, WorkflowValue>;
+      invocationId?: string;
+    }
+  | {
+      type: 'tool.returned';
+      toolId: string;
+      toolName: string;
+      outputs: Record<string, WorkflowValue>;
+      invocationId?: string;
+      latencyMs: number;
+      status: 'ok' | 'error';
+      error?: string;
+    }
   | { type: 'condition.evaluated'; expression: string; result: boolean; branch?: string }
-  | { type: 'state.changed'; scope: ContextScope; key: string; from?: WorkflowValue; to?: WorkflowValue }
+  | {
+      type: 'state.changed';
+      scope: ContextScope;
+      key: string;
+      from?: WorkflowValue;
+      to?: WorkflowValue;
+    }
   | { type: 'conversation.turn'; speaker: TranscriptLine['speaker']; text: string }
   | { type: 'edge.traversed'; edgeId: string; sourceId: string; targetId: string; label?: string }
   | { type: 'channel.opened'; channelSessionId: string; channel: string; provider: string }
   | { type: 'agent.started'; agentId: string; instruction: string }
-  | { type: 'agent.responded'; agentId: string; promptVersion: string; model: string; voice: string; text: string; latencyMs: number }
+  | {
+      type: 'agent.responded';
+      agentId: string;
+      promptVersion: string;
+      model: string;
+      voice: string;
+      text: string;
+      latencyMs: number;
+    }
   | { type: 'knowledge.requested'; query: string; sources?: string[] }
-  | { type: 'knowledge.retrieved'; query: string; matches: { source: string; snippet: string; score: number }[]; latencyMs: number }
-  | { type: 'runtime.completed'; agentCalls: number; toolCalls: number; knowledgeQueries: number; totalLatencyMs: number }
+  | {
+      type: 'knowledge.retrieved';
+      query: string;
+      matches: { source: string; snippet: string; score: number }[];
+      latencyMs: number;
+    }
+  | {
+      type: 'runtime.completed';
+      agentCalls: number;
+      toolCalls: number;
+      knowledgeQueries: number;
+      totalLatencyMs: number;
+    }
   // Conversation Runtime payloads. Turn/consultation ids live on the identity, not here.
-  | { type: 'session.opened'; workflowId: string; definitionVersion: string; channel: ChannelKind; provider: string }
+  | {
+      type: 'session.opened';
+      workflowId: string;
+      definitionVersion: string;
+      channel: ChannelKind;
+      provider: string;
+    }
   | { type: 'session.ended'; reason: SessionEndReason }
   | { type: 'turn.started'; speaker: TurnSpeaker; origin: TurnOrigin }
   | { type: 'turn.partial'; text: string }
@@ -112,8 +166,16 @@ export type ExecutionEventPayload =
   | { type: 'intent.detected'; intent: string; confidence?: number }
   | { type: 'consultation.started'; stimulusKind: Stimulus['kind']; detail?: string }
   | { type: 'consultation.paused'; cursorNodeId: string | null; reason: string }
-  | { type: 'consultation.completed' }
-  | { type: 'directive.issued'; directiveId: string; directiveKind: Directive['kind']; summary: string }
+  // `outcome` is present only when the consultation stopped by completing rather than
+  // pausing — see ConsultationOutcome for why 'end' is the only outcome a well-formed
+  // workflow ever produces.
+  | { type: 'consultation.completed'; outcome?: ConsultationOutcome }
+  | {
+      type: 'directive.issued';
+      directiveId: string;
+      directiveKind: Directive['kind'];
+      summary: string;
+    }
   | { type: 'directive.completed'; directiveId: string }
   | { type: 'directive.abandoned'; directiveId: string; reason: string };
 

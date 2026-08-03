@@ -12,7 +12,8 @@ import type { WorkflowValue } from '@/lib/workflow-context';
 
 export type ChannelKind = 'voice' | 'chat' | 'sms';
 
-export type SessionStatus = 'initializing' | 'active' | 'waiting_external' | 'transferring' | 'ended';
+export type SessionStatus =
+  'initializing' | 'active' | 'waiting_external' | 'transferring' | 'ended';
 export type SessionEndReason = 'completed' | 'caller_hangup' | 'transferred' | 'error' | 'timeout';
 
 export type ConversationSession = {
@@ -68,9 +69,24 @@ export type Stimulus =
 export type Directive =
   | { kind: 'speak'; text: string; interruptible: boolean }
   | { kind: 'listen'; expecting?: string[] }
-  | { kind: 'invoke_tool'; invocationId: string; toolId: string; inputs: Record<string, WorkflowValue>; mode: 'sync' | 'async' }
+  | {
+      kind: 'invoke_tool';
+      invocationId: string;
+      toolId: string;
+      inputs: Record<string, WorkflowValue>;
+      mode: 'sync' | 'async';
+    }
   | { kind: 'transfer'; target: string }
   | { kind: 'end'; reason: string };
 
 /** Where the next consultation resumes. `nodeId: null` starts at the trigger. */
 export type Cursor = { nodeId: string | null };
+
+/**
+ * Why a consultation stopped advancing rather than pausing at a wait point.
+ * `end` is the only outcome of a well-formed workflow; the rest name a specific way
+ * the graph failed to advance, so a malformed definition can never be silently
+ * reported as a successful completion.
+ */
+export type ConsultationOutcome =
+  'end' | 'cycle_detected' | 'missing_resume_node' | 'missing_edge' | 'dead_end';

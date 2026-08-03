@@ -53,6 +53,14 @@ against typed fixtures and a mock runtime.
   real consultation the same way the workflow "Run test" button does, via a pluggable
   caller-turn source (scripted for workflow runs, interactive for agent testing). See
   `ARCHITECTURE.md`'s Architecture Milestones and Conversation Runtime sections.
+- **Conversation Runtime stabilization** — a follow-up pass closed real gaps in that
+  unification: the agent testing panel's End action now genuinely cancels an in-flight
+  session instead of abandoning it; every way a session can stop reports a truthful
+  reason (a malformed graph or exhausted safety guard is never reported as a successful
+  completion); turns carry stable ids with correct causality; and both the "Run test"
+  button and agent testing now share one envelope-producing function instead of each
+  assembling `run.started`/`runtime.completed`/`run.completed` by hand. See
+  `ARCHITECTURE.md`'s Architecture Milestones section.
 - **Calls Intelligence** — the original mock call-operations experience: `/calls`
   performance/search/table and `/calls/[id]` transcript, timeline, extracted data, and
   quality evaluation, backed by `lib/mock-calls.ts`. This remains a hand-authored

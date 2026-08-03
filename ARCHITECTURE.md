@@ -89,7 +89,7 @@ The core primitive is `consultWorkflow` (`lib/workflow-consultation.ts`):
 
 ```
 consultWorkflow(workflow, context, stimulus, cursor, runtime, recorder, ...)
-  → { status: 'paused' | 'completed', cursor, context, directives, waitReason?, events }
+  → { status: 'paused' | 'completed', cursor, context, directives, waitReason?, outcome?, events }
 ```
 
 It advances the graph from `cursor` via `NodeExecutor` until it hits a **wait point**
@@ -99,6 +99,28 @@ mean the engine owns time, which it deliberately never does. `WAIT_POINT_REASON`
 that file is the single place that classifies which node kinds pause and why; `tool`
 pauses only once `ToolRuntime` grows real `mode: 'async'` support, so it's absent from
 that map today, not forgotten.
+
+**`outcome` (a `ConsultationOutcome`, `lib/conversation-types.ts`) is present whenever
+`status: 'completed'`, and `'end'` is the only value a well-formed workflow ever
+produces.** A missing resume node, a within-consultation cycle, a non-end node with no
+outgoing edge, or an edge id that doesn't resolve are each tagged with their own
+outcome and recorded on the `consultation.completed` event — a malformed graph can
+never be silently reported as a successful completion. (`'missing_edge'` is defensive:
+every current `NodeExecutor` only ever proposes a `nextEdgeId` drawn from the node's own
+outgoing edges, so that specific outcome is unreachable through real executor behavior
+today.) `MockConversationRuntime` reads this to decide the session's own truthful end
+reason — see below.
+
+Request/start events (`agent.started`, `tool.invoked`, `knowledge.requested`) are
+emitted **before** `consultWorkflow` awaits the executor, not after — a "started" event
+must never be a retrospective fiction recorded once the call already finished. Since
+that instrumentation can't live inside an executor without widening the stable
+`NodeExecutor` contract below, the consultation loop mirrors each executor's own
+gating condition (e.g. "does this node have an `agent`-type `ref`?") in miniature to
+decide whether to pre-emit. This is a deliberate, small duplication — see the code
+comment at the call site — not an oversight. `tool.returned` now also carries `status`
+and `error` (previously computed on `ToolIO` but silently dropped when emitted) so a
+tool failure is preserved in the canonical stream, not just in the transient result.
 
 `NodeExecutor` (`lib/workflow-executors.ts`) is the stable per-node-kind contract:
 
@@ -163,10 +185,15 @@ This `ConversationTurn` is the only one — `workflow-context.ts`'s simpler
 and `projectConversation`) is named `TranscriptLine`, specifically to avoid colliding
 with this canonical type.
 
-Two of `ConversationTurn`'s fields are optional because nothing populates them yet:
-`turnId` (no emitter assigns one — events correlate by `consultationId` instead) and
-`origin` (only `turn.started` carries it, and `turn.started` itself is never emitted;
-`conversation.turn` is the only anchor that fires in practice today).
+`turnId` is now assigned and carried on the relevant `EventIdentity`s: an agent/system
+turn's id is derived from the step that produced it (`${stepId}-turn`, set in
+`emitStateChanges`); a caller turn's id is derived from the consultation it answered
+(`${consultationId}-caller`, set in `recordCallerTurn`). Causality follows the turn, not
+the pause that merely preceded it — the consultation a caller turn triggers has that
+turn's `turn.completed` event as its `parentEventId`, not the prior
+`consultation.paused`. `origin` remains optional — only `turn.started` carries it, and
+`turn.started` itself is still never emitted; `conversation.turn` is the only anchor
+that fires in practice today.
 
 Turn/directive/session lifecycle events are emitted **only** by the Conversation
 Runtime, never by an executor — turns are not workflow nodes, and the engine never
@@ -176,6 +203,37 @@ layered on top by the Conversation Runtime for caller turns and interruptions. T
 intentionally a little redundant (see `turn.completed` in the Timeline UI, which is
 hidden from display because it duplicates `conversation.turn`'s content) rather than
 one event type trying to serve two purposes.
+
+**`MockConversationRuntime.run()` never rejects.** Every way a session can stop —
+reaching an `end` node, a caller hangup, an unhandled provider exception, or
+exhausting `MAX_CONSULTATIONS` — resolves with a truthful `SessionEndReason`
+(`completed` / `transferred` / `caller_hangup` / `error` / `timeout`), recorded on
+`session.ended`: `'transferred'` is reported whenever the run issued a `transfer`
+directive, even though the graph still walks on to an `end` node afterward; any
+malformed-graph `ConsultationOutcome` (see above) or a thrown provider exception both
+report `'error'`; exhausting `MAX_CONSULTATIONS` reports `'timeout'`, never
+`'completed'`. The whole loop runs inside a single `try`/`catch` for exactly this
+reason — no path lets an exception escape as an unhandled rejection.
+
+**Cancellation is real, not just abandonment.** The interactive `StimulusSource`
+(`createInteractiveStimulusSource`) exposes `cancel()` alongside `submit()` — calling
+it resolves a pending (or not-yet-requested — the two are order-independent, queued the
+same way `submit()` already was) `nextCallerTurn()` with `{ kind: 'cancelled' }`,
+which `run()` turns into a `caller_hangup` ending. `components/agent-testing-panel.tsx`
+wires its End action to this, guarded by a generation token (the same `runToken`
+pattern `workflow-detail.tsx` already used) so a session's `onPause`/`.then` callbacks
+— which still fire once after settling, as the "render the final state" signal — can't
+clobber a reset the user already triggered, or a newer session's state.
+
+**`runConversationSession` (`lib/conversation-runtime.ts`) is the shared envelope
+runner**, wrapping `MockConversationRuntime.run()` with `run.started` →
+(session lifecycle) → `runtime.completed` → `run.completed`. Both `simulateWorkflowRun`
+(`lib/workflow-execution.ts`, the "Run test" button) and the agent testing panel call
+this one function rather than each assembling the envelope by hand — an interactive
+agent test produces exactly the same lifecycle shape a scripted workflow run does.
+`run.completed`'s `outcome` field reports the workflow's own declared outcome variable
+on a normal `'completed'` ending, and the session's `SessionEndReason` itself
+otherwise — so `run.completed` always fires, and is never a lie about what happened.
 
 **The invariant that must never break:** every conversation execution path in this
 codebase — every caller/agent exchange, wherever it's triggered from — flows through
@@ -304,6 +362,16 @@ and what's not built yet.
   previously. Exactly one execution path now exists for any conversation in this
   codebase (`components/agent-testing-panel.tsx`; see the invariant in "Conversation
   Runtime: owns time, not policy" above).
+- **Conversation Runtime stabilization** — real cancellation (`StimulusSource.cancel`,
+  wired to the agent testing panel's End action via a generation-token guard); a
+  truthful `SessionEndReason` for every way a session can stop (`run()` never rejects);
+  a `ConsultationOutcome` vocabulary so a malformed graph is never reported as a
+  successful completion; stable `turnId`s and correct causality (a caller turn, not the
+  pause before it, is the next consultation's causal parent); request/start
+  instrumentation events moved before the provider `await` instead of after; tool
+  `status`/`error` preserved through to `tool.returned`; and `runConversationSession`,
+  the one shared envelope both the "Run test" button and agent testing now call
+  (`lib/conversation-runtime.ts`, `lib/workflow-consultation.ts`).
 
 ## Known architectural debt
 

@@ -4,19 +4,28 @@ import { Construction, Mic, Phone, PhoneOff, Play, Send, Sparkles } from 'lucide
 import { Button, Card, Badge } from '@/components/ui';
 import { testScenarios, type TestScenario } from '@/lib/test-scenarios';
 import { useAgents, useWorkflows } from '@/hooks/use-platform-data';
-import { createInitialContext } from '@/lib/workflow-context';
-import { ExecutionRecorder, nextRunId, nextSessionId, type ExecutionEvent } from '@/lib/workflow-events';
+import {
+  ExecutionRecorder,
+  nextRunId,
+  nextSessionId,
+  type ExecutionEvent,
+} from '@/lib/workflow-events';
 import { createMockRuntime } from '@/lib/runtime/mock-runtime';
-import { MockConversationRuntime, createInteractiveStimulusSource } from '@/lib/conversation-runtime';
+import {
+  createInteractiveStimulusSource,
+  runConversationSession,
+} from '@/lib/conversation-runtime';
 import { projectConversation } from '@/lib/workflow-projections';
 import { cn } from '@/lib/utils';
 
 type Status = 'idle' | 'active' | 'ended';
+type SessionControl = { submit: (text: string) => void; cancel: () => void };
 
-// Drives a real consultation (consultWorkflow / MockConversationRuntime / ExecutionRecorder)
+// Drives a real consultation (runConversationSession / consultWorkflow / ExecutionRecorder)
 // with a live person standing in for the caller, instead of the earlier setTimeout-based
 // fake chat. See documentation/agent-model-design.md §6 — this is the same execution path
-// "Run test" uses on a workflow, not a second engine.
+// "Run test" uses on a workflow (via the same shared runConversationSession envelope),
+// not a second engine.
 export function AgentTestingPanel({ agentId }: { agentId: string }) {
   const { data: agents } = useAgents();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
@@ -28,24 +37,37 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
   const [ready, setReady] = useState(false);
   const [draft, setDraft] = useState('');
   const [scenario, setScenario] = useState<TestScenario | null>(null);
-  const submitRef = useRef<((text: string) => void) | null>(null);
+  const controlRef = useRef<SessionControl | null>(null);
   const pendingFirstMessage = useRef<string | null>(null);
+  // Bumped on every beginSession()/end() so a session's onPause/then callbacks can tell
+  // whether they're still the current session before touching state — cancelling
+  // settles run()'s promise, but its callbacks still fire afterward, and without this
+  // guard they'd clobber the reset end() already applied (or a newer session's state).
+  // Same pattern as workflow-detail.tsx's runToken.
+  const sessionToken = useRef(0);
 
   const turns = useMemo(() => projectConversation(events), [events]);
 
   const beginSession = () => {
     if (!workflow) return;
+    sessionToken.current += 1;
+    const token = sessionToken.current;
     const runId = nextRunId();
     const recorder = new ExecutionRecorder(runId, nextSessionId());
-    const initial = createInitialContext(workflow.variables);
-    const { source, submit } = createInteractiveStimulusSource();
-    submitRef.current = submit;
+    const { source, submit, cancel } = createInteractiveStimulusSource();
+    controlRef.current = { submit, cancel };
     setStatus('active');
     setEvents([]);
     setReady(false);
 
-    new MockConversationRuntime(workflow, createMockRuntime(), recorder, runId, source)
-      .run(initial, undefined, () => {
+    runConversationSession({
+      workflow,
+      runtime: createMockRuntime(),
+      recorder,
+      runId,
+      stimulusSource: source,
+      onPause: () => {
+        if (sessionToken.current !== token) return;
         setEvents([...recorder.list()]);
         if (pendingFirstMessage.current) {
           const text = pendingFirstMessage.current;
@@ -54,11 +76,12 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
         } else {
           setReady(true);
         }
-      })
-      .then(() => {
-        setStatus('ended');
-        setReady(false);
-      });
+      },
+    }).then(() => {
+      if (sessionToken.current !== token) return;
+      setStatus('ended');
+      setReady(false);
+    });
   };
 
   const start = (selected?: TestScenario) => {
@@ -67,8 +90,15 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
     beginSession();
   };
 
+  // Calling cancel() unconditionally is safe whether a session is mid-flight (unblocks
+  // the pending stimulus wait so run() settles with a truthful caller_hangup) or already
+  // ended (nothing pending to resolve). Bumping the token first means that session's
+  // onPause/then callbacks become no-ops once they do fire, so no stale callback
+  // survives past this call to overwrite the reset below.
   const end = () => {
-    submitRef.current = null;
+    sessionToken.current += 1;
+    controlRef.current?.cancel();
+    controlRef.current = null;
     setStatus('idle');
     setEvents([]);
     setReady(false);
@@ -80,11 +110,14 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
     const text = draft.trim();
     if (!text || !ready) return;
     setReady(false);
-    submitRef.current?.(text);
+    controlRef.current?.submit(text);
     setDraft('');
   };
 
-  if (workflowsLoading) return <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">Loading…</div>;
+  if (workflowsLoading)
+    return (
+      <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">Loading…</div>
+    );
 
   if (!workflow) {
     return (
@@ -93,7 +126,8 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
           <Construction className="mx-auto text-muted-foreground" size={28} />
           <h2 className="mt-3 font-medium">No workflow attached</h2>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            {(agent?.name ?? 'This agent') + " isn't attached to a workflow yet. A workflow defines what the agent does on a call, so it's required before it can be tested here."}
+            {(agent?.name ?? 'This agent') +
+              " isn't attached to a workflow yet. A workflow defines what the agent does on a call, so it's required before it can be tested here."}
           </p>
         </div>
       </Card>
@@ -105,15 +139,23 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
       <div className="flex items-center justify-between border-b p-5">
         <div>
           <h2 className="font-medium">Call simulator</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Runs a real test consultation against {workflow.name}. No calls are placed.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Runs a real test consultation against {workflow.name}. No calls are placed.
+          </p>
         </div>
-        <Badge variant={status === 'active' ? 'success' : 'neutral'}>{status === 'active' ? 'Live simulation' : 'Ready'}</Badge>
+        <Badge variant={status === 'active' ? 'success' : 'neutral'}>
+          {status === 'active' ? 'Live simulation' : 'Ready'}
+        </Badge>
       </div>
 
       {status === 'idle' && (
         <div className="grid gap-3 border-b bg-muted/30 p-4 md:grid-cols-3">
           {testScenarios.map((item) => (
-            <button onClick={() => start(item)} className="rounded-md border bg-background p-3 text-left transition-colors hover:bg-muted" key={item.id}>
+            <button
+              onClick={() => start(item)}
+              className="rounded-md border bg-background p-3 text-left transition-colors hover:bg-muted"
+              key={item.id}
+            >
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">{item.title}</p>
                 <Play size={14} />
@@ -132,7 +174,9 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
                 <Sparkles size={19} />
               </div>
               <p className="mt-3 font-medium">Test this agent safely</p>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">Choose a scenario or start an open simulation to review agent behavior.</p>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                Choose a scenario or start an open simulation to review agent behavior.
+              </p>
             </div>
           </div>
         ) : (
@@ -142,9 +186,21 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
                 {turn.text}
               </p>
             ) : (
-              <div className={cn('max-w-[85%]', turn.speaker === 'caller' && 'ml-auto')} key={index}>
-                <p className="mb-1 text-xs text-muted-foreground">{turn.speaker === 'caller' ? 'Caller' : (agent?.name ?? 'Agent')}</p>
-                <div className={cn('rounded-lg px-3 py-2 text-sm', turn.speaker === 'caller' ? 'bg-foreground text-background' : 'bg-muted')}>{turn.text}</div>
+              <div
+                className={cn('max-w-[85%]', turn.speaker === 'caller' && 'ml-auto')}
+                key={index}
+              >
+                <p className="mb-1 text-xs text-muted-foreground">
+                  {turn.speaker === 'caller' ? 'Caller' : (agent?.name ?? 'Agent')}
+                </p>
+                <div
+                  className={cn(
+                    'rounded-lg px-3 py-2 text-sm',
+                    turn.speaker === 'caller' ? 'bg-foreground text-background' : 'bg-muted',
+                  )}
+                >
+                  {turn.text}
+                </div>
               </div>
             ),
           )
@@ -171,7 +227,13 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 className="input pl-9"
-                placeholder={status === 'ended' ? 'Test ended' : ready ? 'Type as the caller...' : 'Waiting for the agent…'}
+                placeholder={
+                  status === 'ended'
+                    ? 'Test ended'
+                    : ready
+                      ? 'Type as the caller...'
+                      : 'Waiting for the agent…'
+                }
                 disabled={status === 'ended' || !ready}
               />
             </div>
