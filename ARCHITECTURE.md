@@ -8,8 +8,11 @@ disagree, the code is right and this file is stale; fix the file.
 For product vision and behavioral ground rules, see `CLAUDE.md` and
 `documentation/project-constitution.md`. For the Conversation Runtime's design record
 (the decisions, not just the current shape), see
-`documentation/conversation-runtime-design.md`. This file is the map; that one is the
-minutes of the meeting where the map was drawn.
+`documentation/conversation-runtime-design.md`. For the Agent data model's design
+record, see `documentation/agent-model-design.md` — **approved, not yet implemented**;
+today's `Agent` type (`lib/mock-data.ts`) remains the only Agent-related model the
+execution engine actually reads. This file is the map; those are the minutes of the
+meetings where the map was drawn.
 
 ## Scope
 
