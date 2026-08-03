@@ -17,7 +17,11 @@ against typed fixtures and a mock runtime.
   knowledge, tools (list / detail), workflows (list / detail), analytics, calls
   (list / detail), plus placeholder sections.
 - **Agents** — agent model with `promptVersion` + `model` fields, list and detail
-  workspaces, prompt studio, structured editor, a local testing panel, and validation.
+  workspaces, prompt studio, structured editor, and validation. The testing panel now
+  drives a real test consultation through the Conversation Runtime (see below) rather
+  than a local fake chat. The target Agent data model — currently fragmented across
+  several disconnected surfaces in the actual code — has an approved design record at
+  `agent-model-design.md`; implementation hasn't started.
 - **Tools** — registry with typed inputs *and* outputs and a deterministic mock result
   per tool; list and detail views.
 - **Knowledge** — knowledge-source concepts and listing (retrieval is served through
@@ -36,11 +40,37 @@ against typed fixtures and a mock runtime.
 - **Conversation Runtime** — phases 1–3 complete: session/turn concepts and event
   identities, consultation-based execution with cursor resumption, and a
   `MockConversationRuntime` that drives scripted multi-turn scenarios including one
-  interruption case. Phase 4 (a turns projection / UI) is not started. See
-  `conversation-runtime-design.md`.
+  interruption case. Phase 4's core is now done too: `ConversationTurn` naming was
+  clarified (the flat `{ speaker, text }` transcript shape was renamed `TranscriptLine`
+  to stop colliding with the canonical turn-lifecycle type), the `projectTurns`
+  projection was implemented and tested, and a Turns tab surfaces it in the workflow
+  run panel. Only `invocationId`-based tool-call pairing (for async tools) remains open
+  within phase 4. See `conversation-runtime-design.md`.
+- **Unified conversation execution** — there is now exactly one execution path for any
+  agent/caller exchange in the codebase: `MockConversationRuntime` driving
+  `consultWorkflow()` over the one `ExecutionRecorder` event stream. The agent testing
+  panel previously ran its own disconnected, hand-scripted fake chat; it now drives a
+  real consultation the same way the workflow "Run test" button does, via a pluggable
+  caller-turn source (scripted for workflow runs, interactive for agent testing). See
+  `ARCHITECTURE.md`'s Architecture Milestones and Conversation Runtime sections.
 - **Calls Intelligence** — the original mock call-operations experience: `/calls`
   performance/search/table and `/calls/[id]` transcript, timeline, extracted data, and
-  quality evaluation, backed by `lib/mock-calls.ts`.
+  quality evaluation, backed by `lib/mock-calls.ts`. This remains a hand-authored
+  fixture model, not a projection of the event stream — see "Next major milestone"
+  below.
+
+## Next major milestone: the Calls domain
+
+With conversation execution unified onto one event-sourced path, the next major
+architectural milestone is bringing Calls Intelligence onto that same foundation:
+`CallRecord` (`lib/mock-calls.ts`) should become a projection of one session's event
+stream rather than a hand-authored parallel structure — the resolution direction
+`ARCHITECTURE.md`'s known-debt list already names. This is where every layer built so
+far (workflow execution, the Conversation Runtime, event sourcing, the projection
+layer) converges into one product surface, and it's sequenced after the execution path
+was unified specifically so Calls can represent both workflow runs and agent tests
+faithfully from the start, rather than needing revisiting once agent testing produced
+its own real sessions.
 
 ## Not built yet (by design)
 

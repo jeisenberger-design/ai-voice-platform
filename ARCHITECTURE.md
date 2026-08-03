@@ -132,10 +132,21 @@ channel physics.
 
 What it does, concretely: after each `consultWorkflow` call, it processes the
 returned `directives` (`directive.issued` → `completed`, or `abandoned` +
-`turn.interrupted` when the upcoming scripted turn interrupts an interruptible
-`speak`), then decides the next `Stimulus` — a real scripted caller turn on an
-`agent_turn` pause (`lib/conversation-scenarios.ts`), or a system timer for
-`transfer`/future `async_tool` pauses, which have no caller response to react to.
+`turn.interrupted` when the upcoming turn interrupts an interruptible `speak`), then
+decides the next `Stimulus` — the next caller turn on an `agent_turn` pause, sourced
+from a pluggable `StimulusSource`, or a system timer for `transfer`/future `async_tool`
+pauses, which have no caller response to react to.
+
+`StimulusSource` has two implementations, both driving the identical
+`consultWorkflow`/event path — there is no second execution engine, just two ways of
+sourcing the next caller turn. The default, scripted source replays one deterministic
+scenario per workflow (`lib/conversation-scenarios.ts`) — this is what the "Run test"
+button uses. An interactive source (`createInteractiveStimulusSource`) resolves each
+turn from a live person instead of a script — this is what the agent testing panel
+(`components/agent-testing-panel.tsx`) uses, having previously run its own disconnected
+`setTimeout`-based fake chat that never touched `WorkflowContext`, `ExecutionRecorder`,
+or `consultWorkflow` at all. That gap is closed: agent tests are now real sessions on
+the real event stream, observable through the same projections as a workflow run.
 
 `lib/conversation-types.ts` declares the target session/turn domain model
 (`ConversationSession`, `ConversationTurn`, `Stimulus`, `Directive`, `Cursor`) per the
@@ -165,6 +176,17 @@ layered on top by the Conversation Runtime for caller turns and interruptions. T
 intentionally a little redundant (see `turn.completed` in the Timeline UI, which is
 hidden from display because it duplicates `conversation.turn`'s content) rather than
 one event type trying to serve two purposes.
+
+**The invariant that must never break:** every conversation execution path in this
+codebase — every caller/agent exchange, wherever it's triggered from — flows through
+the Conversation Runtime, which drives `consultWorkflow()`, which executes via the
+unchanged `NodeExecutor` contract. There is exactly one place that produces execution
+events (`ExecutionRecorder`) and exactly one canonical stream per session. UI
+components never interpret that stream directly — they consume the projections in
+`lib/workflow-projections.ts`. If a future feature needs a new way to run a
+conversation, it must add a new `StimulusSource` (or grow the Conversation Runtime),
+never a second, parallel driver — that is precisely the mistake `AgentTestingPanel`
+made and has since been unwound from.
 
 ## Runtime Interfaces: the provider boundary
 
@@ -237,6 +259,52 @@ frontend/stores/                 Zustand — local UI state only
 frontend/hooks/use-platform-data.ts   React Query hooks over mock-api.ts
 ```
 
+## Architecture Milestones
+
+What's actually been built, in roughly the order it landed. This is a cumulative
+record, not a status snapshot — see `documentation/current-state.md` for current status
+and what's not built yet.
+
+- **Workflow Definition** — the pure, serializable graph model: typed nodes/edges,
+  input/output bindings, structured (non-`eval`) predicates (`lib/mock-workflows.ts`,
+  `lib/workflow-predicates.ts`).
+- **Execution Engine** — `consultWorkflow`, the consultation-based execution primitive,
+  and the stable per-node-kind `NodeExecutor` contract (`lib/workflow-consultation.ts`,
+  `lib/workflow-executors.ts`).
+- **Event Sourcing** — the immutable, append-only `ExecutionEvent` stream and
+  `ExecutionRecorder`, with compositional correlation ids and a `durability` class
+  (`lib/workflow-events.ts`).
+- **Projection Layer** — pure functions folding the event stream into every read model
+  (path, context, state transitions, tool calls, conversation, turns), with no parallel
+  data structures to keep in sync (`lib/workflow-projections.ts`).
+- **Runtime Interfaces** — the four async provider contracts (Agent/Tool/Knowledge/
+  Channel) and their deterministic mock implementations, the sole fixture readers in
+  the execution path (`lib/runtime/contracts.ts`, `lib/runtime/mock-runtime.ts`).
+- **Conversation Runtime** — `MockConversationRuntime`, owning sessions, turns, time,
+  and interruption as a layer deliberately separate from the engine; cursor-based
+  consultation resumption; scripted multi-turn scenarios including one interruption
+  case (`lib/conversation-runtime.ts`, `documentation/conversation-runtime-design.md`).
+- **ConversationTurn model** — the canonical turn-lifecycle domain type
+  (`lib/conversation-types.ts`), and the naming split that keeps it from colliding with
+  `workflow-context.ts`'s simpler flat transcript shape, renamed `TranscriptLine`.
+- **projectTurns projection** — folds `conversation.turn`/`turn.interrupted`/
+  `directive.abandoned`/`intent.detected` into `ConversationTurn` records, correlated
+  per consultation; the first tested projection in the codebase
+  (`workflow-projections.test.ts`).
+- **Turns UI** — the Turns tab in the workflow run panel, consuming `projectTurns`
+  through the same projection boundary every other tab uses
+  (`components/workflows/workflow-run-panel.tsx`).
+- **Agent Model (design)** — an approved design record for the target Agent data
+  model, naming the ownership direction correction (Agent should own its Workflow
+  references, not the reverse) and a capability-vs-invocation split for tools/knowledge
+  bindings; not yet implemented (`documentation/agent-model-design.md`).
+- **Unified Conversation Execution Path** — the agent testing panel now drives a real
+  consultation through `MockConversationRuntime`/`consultWorkflow` via a pluggable
+  `StimulusSource`, instead of the disconnected `setTimeout`-based fake chat it ran
+  previously. Exactly one execution path now exists for any conversation in this
+  codebase (`components/agent-testing-panel.tsx`; see the invariant in "Conversation
+  Runtime: owns time, not policy" above).
+
 ## Known architectural debt
 
 Written down so it doesn't have to be rediscovered. None of this blocks current work;
@@ -264,10 +332,19 @@ it matters before persistence, multi-tenancy, or a real provider integration.
 
 Conversation Runtime phases 1–3 are done: event identities + session/turn concepts,
 consultation-based execution, scripted multi-turn scenarios with one interruption
-case. Phase 4's projection half is started: `projectTurns` exists and is tested
+case. Phase 4 is now mostly done too: `projectTurns` exists and is tested
 (`workflow-projections.test.ts`, the first test suite in this repo — see the `test`
-script and `vitest.config.ts`), but it is **not wired into any component** — no Turns
-tab, no transcript-from-turn-events UI. `invocationId`-based tool-call pairing (for
-when tools stop being purely synchronous) also hasn't started. Explicitly not started
-by design, and not to be started without a fresh scoping pass: a graph-authoring/
-editing canvas, real voice streaming, backend persistence, multi-tenant infrastructure.
+script and `vitest.config.ts`) and **is wired into the workflow run panel** as the
+Turns tab. The one thing still open within phase 4 is `invocationId`-based tool-call
+pairing, for when tools stop being purely synchronous. Explicitly not started by
+design, and not to be started without a fresh scoping pass: a graph-authoring/editing
+canvas, real voice streaming, backend persistence, multi-tenant infrastructure.
+
+Outside the Conversation Runtime design doc's own phase list, two more milestones have
+landed: an approved Agent Model design record, and the unification of agent testing
+onto the real Conversation Runtime (see Architecture Milestones above). With that
+unification done, **the next major architectural milestone is the Calls domain** —
+migrating `CallRecord` (`lib/mock-calls.ts`) from a hand-authored fixture model onto a
+real projection of the event stream, per the resolution direction already named in
+Known architectural debt above. See `documentation/current-state.md` for the fuller
+rationale.
