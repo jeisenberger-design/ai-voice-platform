@@ -1,13 +1,20 @@
 // MockConversationRuntime — phase 3 driver over consultWorkflow.
 //
-// Drives one deterministic scripted scenario per workflow: each 'agent_turn' pause is
-// resumed with a real caller line (text + optional intent) instead of phase 2's empty
-// placeholder, and support-triage's scenario demonstrates an interruption. Turn and
-// directive lifecycle events are emitted here, never by the engine, because turns are a
-// Conversation Runtime concept, not a workflow node — the engine only ever produces the
-// flat `conversation.turn` transcript line as a side effect of node execution (see
+// Drives consultations to completion, resuming each 'agent_turn' pause with the next
+// caller turn from an injected StimulusSource. Turn and directive lifecycle events are
+// emitted here, never by the engine, because turns are a Conversation Runtime concept,
+// not a workflow node — the engine only ever produces the flat `conversation.turn`
+// transcript line as a side effect of node execution (see
 // documentation/conversation-runtime-design.md). 'transfer'/async-tool pauses still
-// auto-resume via a system timer; scripting applies to conversational exchanges only.
+// auto-resume via a system timer; a StimulusSource applies to conversational exchanges
+// only.
+//
+// Two StimulusSource implementations exist: `scriptedStimulusSource` (default) replays
+// one deterministic scenario per workflow (lib/conversation-scenarios.ts) — this is what
+// "Run test" uses, unchanged from phase 3. `createInteractiveStimulusSource` resolves
+// each turn from a live caller instead of a script — this is what agent testing uses
+// (components/agent-testing-panel.tsx). Both drive the exact same consultWorkflow/event
+// path; there is no second execution engine.
 
 import type { Workflow } from '@/lib/mock-workflows';
 import { appendTurn, setValue, type WorkflowContext } from '@/lib/workflow-context';
@@ -20,6 +27,63 @@ import { getScenario, scenarioTurn, type ScriptedTurn } from '@/lib/conversation
 // Defensive guard against a mis-modeled graph running forever in the absence of a real
 // caller to break the cycle.
 const MAX_CONSULTATIONS = 50;
+
+// Sources the next caller turn at each 'agent_turn' wait point.
+export type StimulusSource = {
+  /**
+   * Non-blocking lookahead: does the *upcoming* caller turn interrupt an in-flight
+   * speak? Scripted sources know this in advance (it's authored data); interactive
+   * sources always report false — real interruption timing isn't modeled without live
+   * audio (see documentation/agent-model-design.md §7).
+   */
+  peekInterrupts(scriptIndex: number): boolean;
+  /** Resolves the next caller turn. May await external input. */
+  nextCallerTurn(scriptIndex: number): Promise<ScriptedTurn>;
+};
+
+function scriptedStimulusSource(workflowId: string): StimulusSource {
+  const scenario = getScenario(workflowId);
+  return {
+    peekInterrupts: (scriptIndex) => scenarioTurn(scenario, scriptIndex).interrupts === true,
+    nextCallerTurn: async (scriptIndex) => scenarioTurn(scenario, scriptIndex),
+  };
+}
+
+/**
+ * A caller-driven source: `nextCallerTurn` doesn't resolve until `submit` is called.
+ * Used by agent testing to let a real person stand in for the caller at each
+ * 'agent_turn' pause instead of replaying a script.
+ */
+export function createInteractiveStimulusSource(): { source: StimulusSource; submit: (text: string) => void } {
+  let resolve: ((turn: ScriptedTurn) => void) | null = null;
+  // `submit` may be called before `nextCallerTurn` is requested (e.g. a scenario
+  // seeding the opening caller line right after the first pause) — queue it so the
+  // two are order-independent instead of racing.
+  let queued: ScriptedTurn | null = null;
+  return {
+    source: {
+      peekInterrupts: () => false,
+      nextCallerTurn: () => {
+        if (queued) {
+          const turn = queued;
+          queued = null;
+          return Promise.resolve(turn);
+        }
+        return new Promise<ScriptedTurn>((res) => { resolve = res; });
+      },
+    },
+    submit: (text: string) => {
+      const turn: ScriptedTurn = { text };
+      if (resolve) {
+        const pending = resolve;
+        resolve = null;
+        pending(turn);
+      } else {
+        queued = turn;
+      }
+    },
+  };
+}
 
 function truncateForInterruption(text: string): string {
   const sentenceEnd = text.search(/[.!?]/);
@@ -51,11 +115,16 @@ export class MockConversationRuntime {
     private readonly runtime: PlatformRuntime,
     private readonly recorder: ExecutionRecorder,
     private readonly runId: string,
+    private readonly stimulusSource: StimulusSource = scriptedStimulusSource(workflow.id),
   ) {}
 
-  /** Drives consultations to completion, resuming each pause per the workflow's scripted scenario. */
-  async run(initialContext: WorkflowContext, runStartedEventId: string): Promise<{ context: WorkflowContext }> {
-    const scenario = getScenario(this.workflow.id);
+  /**
+   * Drives consultations to completion, resuming each pause per `stimulusSource`.
+   * `onPause` fires whenever an 'agent_turn' wait point is about to await the next
+   * caller turn — the interactive source uses this as its "render now" signal, since
+   * `nextCallerTurn` may not resolve until external input arrives.
+   */
+  async run(initialContext: WorkflowContext, runStartedEventId: string | undefined, onPause?: (recorder: ExecutionRecorder) => void): Promise<{ context: WorkflowContext }> {
     const opened = this.recorder.emit(
       { type: 'session.opened', workflowId: this.workflow.id, definitionVersion: `v${this.workflow.version}`, channel: 'voice', provider: 'mock-channel' },
       { parentEventId: runStartedEventId },
@@ -82,7 +151,7 @@ export class MockConversationRuntime {
       });
       context = result.context;
 
-      const nextIsInterrupting = result.status === 'paused' && result.waitReason === 'agent_turn' && scenarioTurn(scenario, scriptIndex).interrupts === true;
+      const nextIsInterrupting = result.status === 'paused' && result.waitReason === 'agent_turn' && this.stimulusSource.peekInterrupts(scriptIndex);
       this.processDirectives(result.directives, consultationId, nextIsInterrupting);
 
       if (result.status === 'completed') break;
@@ -92,20 +161,22 @@ export class MockConversationRuntime {
       cursor = result.cursor;
 
       if (result.waitReason === 'agent_turn') {
-        const scripted = scenarioTurn(scenario, scriptIndex);
+        onPause?.(this.recorder);
+        const scripted = await this.stimulusSource.nextCallerTurn(scriptIndex);
         scriptIndex += 1;
         context = this.recordCallerTurn(context, scripted, consultationId);
         stimulus = scripted.text
           ? { kind: 'caller.turn', turnId: `${consultationId}-caller`, text: scripted.text, intent: scripted.intent }
           : { kind: 'timer', timerId: `${consultationId}-auto` };
       } else {
-        // 'transfer' and the future 'async_tool' have no scripted caller response to
-        // react to — a system timer stands in for "resume now".
+        // 'transfer' and the future 'async_tool' have no caller response to react to —
+        // a system timer stands in for "resume now".
         stimulus = { kind: 'timer', timerId: `${consultationId}-auto` };
       }
     }
 
     this.recorder.emit({ type: 'session.ended', reason: 'completed' }, { parentEventId: opened.eventId });
+    onPause?.(this.recorder);
     return { context };
   }
 
