@@ -88,7 +88,9 @@ export class MockKnowledgeRuntime implements KnowledgeRuntime {
   async retrieve(request: KnowledgeRequest): Promise<KnowledgeResult> {
     const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
     const requested = (request.sources ?? []).map(normalize);
-    const scoped = requested.length ? sources.filter((source) => requested.includes(normalize(source.name))) : sources;
+    const scoped = requested.length
+      ? sources.filter((source) => requested.includes(normalize(source.name)))
+      : sources;
     const pool = scoped.length ? scoped : sources;
     const topK = request.topK ?? 2;
     return {

@@ -16,7 +16,9 @@ export default function WorkflowsPage() {
       data.filter((workflow) => {
         const q = filters.query.toLowerCase();
         const searchable = `${workflow.name} ${workflow.description}`.toLowerCase();
-        return (!q || searchable.includes(q)) && (!filters.status || workflow.status === filters.status);
+        return (
+          (!q || searchable.includes(q)) && (!filters.status || workflow.status === filters.status)
+        );
       }),
     [data, filters],
   );
@@ -24,7 +26,10 @@ export default function WorkflowsPage() {
     () => [
       ['Total workflows', data.length.toString()],
       ['Live', data.filter((workflow) => workflow.status === 'Live').length.toString()],
-      ['Runs this month', data.reduce((sum, workflow) => sum + workflow.runsThisMonth, 0).toLocaleString()],
+      [
+        'Runs this month',
+        data.reduce((sum, workflow) => sum + workflow.runsThisMonth, 0).toLocaleString(),
+      ],
       [
         'Avg. success',
         (() => {
@@ -60,7 +65,8 @@ export default function WorkflowsPage() {
         <div className="mb-3">
           <h2 className="font-medium">Orchestration flows</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {workflows.length} {workflows.length === 1 ? 'workflow' : 'workflows'} matching the current view.
+            {workflows.length} {workflows.length === 1 ? 'workflow' : 'workflows'} matching the
+            current view.
           </p>
         </div>
         <div className="rounded-lg border bg-card">

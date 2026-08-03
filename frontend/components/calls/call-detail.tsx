@@ -1,3 +1,72 @@
-import type { ReactNode } from 'react'; import { ArrowLeft, CalendarClock, CircleDollarSign, Clock3, Hash, UserRound } from 'lucide-react'; import Link from 'next/link'; import { Badge, Card } from '@/components/ui'; import type { CallRecord } from '@/lib/mock-calls'; import { TranscriptViewer } from '@/components/calls/transcript-viewer'; import { ExtractedDataPanel } from '@/components/calls/extracted-data-panel'; import { CallTimeline } from '@/components/calls/call-timeline'; import { QualityScoreCard } from '@/components/calls/quality-score-card';
-export function CallDetail({call}:{call:CallRecord}){return <><Link href="/calls" className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft size={15}/>Calls</Link><div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-start"><div><div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">Call review</h1><Badge variant={call.outcome==='Transferred'?'warning':'success'}>{call.outcome}</Badge></div><p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><Hash size={14}/>{call.id}</p></div><Card className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-5"><HeaderMetric icon={<UserRound size={15}/>} label="Agent" value={call.agent}/><HeaderMetric icon={<CalendarClock size={15}/>} label="Date / time" value={call.dateLabel}/><HeaderMetric icon={<Clock3 size={15}/>} label="Duration" value={call.duration}/><HeaderMetric icon={<CircleDollarSign size={15}/>} label="Cost" value={call.cost}/><HeaderMetric icon={<Hash size={15}/>} label="Quality" value={`${call.qualityScore} / 100`}/></Card></div><div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]"><div className="space-y-6"><TranscriptViewer transcript={call.transcript}/><CallTimeline events={call.timeline}/></div><aside className="space-y-6"><ExtractedDataPanel call={call}/><QualityScoreCard call={call}/></aside></div></>}
-function HeaderMetric({icon,label,value}:{icon:ReactNode;label:string;value:string}){return <div><p className="flex items-center gap-1 text-xs text-muted-foreground">{icon}{label}</p><p className="mt-1 font-medium">{value}</p></div>}
+import type { ReactNode } from 'react';
+import { ArrowLeft, CalendarClock, CircleDollarSign, Clock3, Hash, UserRound } from 'lucide-react';
+import Link from 'next/link';
+import { Badge, Card } from '@/components/ui';
+import type { CallRecord } from '@/lib/mock-calls';
+import { TranscriptViewer } from '@/components/calls/transcript-viewer';
+import { ExtractedDataPanel } from '@/components/calls/extracted-data-panel';
+import { CallTimeline } from '@/components/calls/call-timeline';
+import { QualityScoreCard } from '@/components/calls/quality-score-card';
+export function CallDetail({ call }: { call: CallRecord }) {
+  return (
+    <>
+      <Link
+        href="/calls"
+        className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft size={15} />
+        Calls
+      </Link>
+      <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">Call review</h1>
+            <Badge variant={call.outcome === 'Transferred' ? 'warning' : 'success'}>
+              {call.outcome}
+            </Badge>
+          </div>
+          <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Hash size={14} />
+            {call.id}
+          </p>
+        </div>
+        <Card className="grid grid-cols-2 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-5">
+          <HeaderMetric icon={<UserRound size={15} />} label="Agent" value={call.agent} />
+          <HeaderMetric
+            icon={<CalendarClock size={15} />}
+            label="Date / time"
+            value={call.dateLabel}
+          />
+          <HeaderMetric icon={<Clock3 size={15} />} label="Duration" value={call.duration} />
+          <HeaderMetric icon={<CircleDollarSign size={15} />} label="Cost" value={call.cost} />
+          <HeaderMetric
+            icon={<Hash size={15} />}
+            label="Quality"
+            value={`${call.qualityScore} / 100`}
+          />
+        </Card>
+      </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-6">
+          <TranscriptViewer transcript={call.transcript} />
+          <CallTimeline events={call.timeline} />
+        </div>
+        <aside className="space-y-6">
+          <ExtractedDataPanel call={call} />
+          <QualityScoreCard call={call} />
+        </aside>
+      </div>
+    </>
+  );
+}
+function HeaderMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div>
+      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+        {icon}
+        {label}
+      </p>
+      <p className="mt-1 font-medium">{value}</p>
+    </div>
+  );
+}

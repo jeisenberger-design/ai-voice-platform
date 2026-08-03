@@ -24,12 +24,23 @@ const scenarios: Record<string, ConversationScenario> = {
   wf_sales_qualification: {
     id: 'standard_inquiry',
     label: 'Standard inbound inquiry',
-    turns: [{ text: 'Hi, I saw your ad online and I am interested in booking a consultation.', intent: 'general_inquiry' }],
+    turns: [
+      {
+        text: 'Hi, I saw your ad online and I am interested in booking a consultation.',
+        intent: 'general_inquiry',
+      },
+    ],
   },
   wf_support_triage: {
     id: 'urgent_escalation',
     label: 'Caller interrupts with an urgent issue',
-    turns: [{ text: 'This can not wait, I need help right now!', intent: 'urgent_escalation', interrupts: true }],
+    turns: [
+      {
+        text: 'This can not wait, I need help right now!',
+        intent: 'urgent_escalation',
+        interrupts: true,
+      },
+    ],
   },
 };
 
@@ -40,7 +51,10 @@ export function getScenario(workflowId: string): ConversationScenario | undefine
 }
 
 /** Returns the scripted turn at `index`, holding on the last turn if the script is shorter. */
-export function scenarioTurn(scenario: ConversationScenario | undefined, index: number): ScriptedTurn {
+export function scenarioTurn(
+  scenario: ConversationScenario | undefined,
+  index: number,
+): ScriptedTurn {
   if (!scenario || scenario.turns.length === 0) return fallbackTurn;
   return scenario.turns[index] ?? scenario.turns[scenario.turns.length - 1];
 }

@@ -11,7 +11,10 @@ export function ToolDetail({ tool }: { tool: Tool }) {
   return (
     <>
       <header className="mb-6">
-        <Link href="/tools" className="mb-4 flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/tools"
+          className="mb-4 flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft size={15} />
           Tools
         </Link>
@@ -23,7 +26,9 @@ export function ToolDetail({ tool }: { tool: Tool }) {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-semibold tracking-tight">{tool.name}</h1>
-                <Badge variant={tool.status === 'Active' ? 'success' : 'neutral'}>{tool.status}</Badge>
+                <Badge variant={tool.status === 'Active' ? 'success' : 'neutral'}>
+                  {tool.status}
+                </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {tool.category} · {tool.kind}
@@ -46,10 +51,14 @@ export function ToolDetail({ tool }: { tool: Tool }) {
           <Card className="overflow-hidden">
             <div className="border-b p-5">
               <h2 className="font-medium">Parameters</h2>
-              <p className="mt-1 text-sm text-muted-foreground">The inputs the agent must supply to call this tool.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                The inputs the agent must supply to call this tool.
+              </p>
             </div>
             {tool.parameters.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">This tool takes no parameters.</div>
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                This tool takes no parameters.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">
@@ -89,10 +98,14 @@ export function ToolDetail({ tool }: { tool: Tool }) {
           <Card className="overflow-hidden">
             <div className="border-b p-5">
               <h2 className="font-medium">Outputs</h2>
-              <p className="mt-1 text-sm text-muted-foreground">The values this tool returns into workflow state.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                The values this tool returns into workflow state.
+              </p>
             </div>
             {tool.outputs.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">This tool returns no structured output.</div>
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                This tool returns no structured output.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[480px] text-left text-sm">
@@ -160,7 +173,9 @@ export function ToolDetail({ tool }: { tool: Tool }) {
                 <p className="text-sm text-muted-foreground">Calls this month</p>
               </div>
               <div>
-                <p className="text-2xl font-semibold">{tool.callsThisMonth ? `${tool.successRate}%` : '—'}</p>
+                <p className="text-2xl font-semibold">
+                  {tool.callsThisMonth ? `${tool.successRate}%` : '—'}
+                </p>
                 <p className="text-sm text-muted-foreground">Success rate</p>
               </div>
             </div>
@@ -174,7 +189,11 @@ export function ToolDetail({ tool }: { tool: Tool }) {
             ) : (
               <div className="mt-4 space-y-3">
                 {linkedAgents.map((agent) => (
-                  <Link href={`/agents/${agent.id}`} className="flex items-center gap-3 hover:underline" key={agent.id}>
+                  <Link
+                    href={`/agents/${agent.id}`}
+                    className="flex items-center gap-3 hover:underline"
+                    key={agent.id}
+                  >
                     <div className="grid size-8 place-items-center rounded-md bg-muted">
                       <Bot size={15} />
                     </div>
@@ -197,7 +216,13 @@ function ToolTester({ tool }: { tool: Tool }) {
     event.preventDefault();
     setResult(
       JSON.stringify(
-        { tool: tool.id, status: 'ok', latency_ms: 214, arguments: values, note: 'Mock invocation. No external request was made.' },
+        {
+          tool: tool.id,
+          status: 'ok',
+          latency_ms: 214,
+          arguments: values,
+          note: 'Mock invocation. No external request was made.',
+        },
         null,
         2,
       ),
@@ -208,7 +233,9 @@ function ToolTester({ tool }: { tool: Tool }) {
       <div className="flex items-center justify-between border-b p-5">
         <div>
           <h2 className="font-medium">Test invocation</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Locally simulate a call. No external request is made.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Locally simulate a call. No external request is made.
+          </p>
         </div>
         <Badge variant="neutral">Mock</Badge>
       </div>
@@ -222,7 +249,9 @@ function ToolTester({ tool }: { tool: Tool }) {
                 <select
                   className="input"
                   value={values[param.name] ?? ''}
-                  onChange={(e) => setValues((current) => ({ ...current, [param.name]: e.target.value }))}
+                  onChange={(e) =>
+                    setValues((current) => ({ ...current, [param.name]: e.target.value }))
+                  }
                 >
                   <option value="">Select…</option>
                   {param.options.map((option) => (
@@ -233,7 +262,9 @@ function ToolTester({ tool }: { tool: Tool }) {
                 <input
                   className="input"
                   value={values[param.name] ?? ''}
-                  onChange={(e) => setValues((current) => ({ ...current, [param.name]: e.target.value }))}
+                  onChange={(e) =>
+                    setValues((current) => ({ ...current, [param.name]: e.target.value }))
+                  }
                   placeholder={param.description}
                 />
               )}

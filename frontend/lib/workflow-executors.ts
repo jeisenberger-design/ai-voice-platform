@@ -7,9 +7,21 @@
 // the runtime interfaces, so swapping providers requires no change here.
 
 import type { WorkflowEdge, WorkflowNode } from '@/lib/mock-workflows';
-import { appendTurn, resolveOperand, setValue, type WorkflowContext, type WorkflowValue } from '@/lib/workflow-context';
+import {
+  appendTurn,
+  resolveOperand,
+  setValue,
+  type WorkflowContext,
+  type WorkflowValue,
+} from '@/lib/workflow-context';
 import { describePredicateWithValues, evaluatePredicate } from '@/lib/workflow-predicates';
-import type { AgentResult, ChannelSession, KnowledgeResult, PlatformRuntime, RuntimeCallMeta } from '@/lib/runtime/contracts';
+import type {
+  AgentResult,
+  ChannelSession,
+  KnowledgeResult,
+  PlatformRuntime,
+  RuntimeCallMeta,
+} from '@/lib/runtime/contracts';
 
 export type ConditionEval = { expression: string; result: boolean; branch?: string };
 export type ToolIO = {
@@ -56,10 +68,12 @@ const trigger: NodeExecutor = async ({ node, context, outgoing, runtime, meta, w
   // stay deterministic regardless of which channel provider is attached.
   next = setValue(next, { scope: 'session', key: 'callId' }, session.sessionId);
   next = setValue(next, { scope: 'session', key: 'channel' }, session.channel);
-  for (const [key, value] of Object.entries(session.caller)) next = setValue(next, { scope: 'session', key }, value);
+  for (const [key, value] of Object.entries(session.caller))
+    next = setValue(next, { scope: 'session', key }, value);
 
   if (node.seed?.session) {
-    for (const [key, value] of Object.entries(node.seed.session)) next = setValue(next, { scope: 'session', key }, value);
+    for (const [key, value] of Object.entries(node.seed.session))
+      next = setValue(next, { scope: 'session', key }, value);
   }
   if (node.seed?.variables) {
     for (const [key, value] of Object.entries(node.seed.variables)) {
@@ -68,13 +82,23 @@ const trigger: NodeExecutor = async ({ node, context, outgoing, runtime, meta, w
     }
   }
   next = appendTurn(next, { speaker: 'system', text: 'Call started' });
-  return { context: next, detail: 'Inbound call received', nextEdgeId: firstEdgeId(outgoing), variablesSet, channel: session };
+  return {
+    context: next,
+    detail: 'Inbound call received',
+    nextEdgeId: firstEdgeId(outgoing),
+    variablesSet,
+    channel: session,
+  };
 };
 
 const agent: NodeExecutor = async ({ node, context, outgoing, runtime, meta }) => {
   const agentId = node.ref?.type === 'agent' ? node.ref.id : undefined;
   if (!agentId) {
-    return { context: appendTurn(context, { speaker: 'agent', text: node.label }), detail: 'Agent turn handled', nextEdgeId: firstEdgeId(outgoing) };
+    return {
+      context: appendTurn(context, { speaker: 'agent', text: node.label }),
+      detail: 'Agent turn handled',
+      nextEdgeId: firstEdgeId(outgoing),
+    };
   }
   const result = await runtime.agent.respond({ agentId, instruction: node.label, context, meta });
   return {
@@ -93,9 +117,17 @@ const message: NodeExecutor = async ({ node, context, outgoing }) => ({
 
 const knowledge: NodeExecutor = async ({ node, context, outgoing, runtime, meta }) => {
   const scoped = node.ref?.type === 'knowledge' ? [node.ref.id] : undefined;
-  const result = await runtime.knowledge.retrieve({ query: node.label, sources: scoped, topK: 2, meta });
+  const result = await runtime.knowledge.retrieve({
+    query: node.label,
+    sources: scoped,
+    topK: 2,
+    meta,
+  });
   return {
-    context: appendTurn(context, { speaker: 'system', text: `Knowledge retrieved (${result.matches.length} matches)` }),
+    context: appendTurn(context, {
+      speaker: 'system',
+      text: `Knowledge retrieved (${result.matches.length} matches)`,
+    }),
     detail: `Knowledge retrieved · ${result.matches.length} matches`,
     nextEdgeId: firstEdgeId(outgoing),
     knowledge: result,
@@ -128,7 +160,15 @@ const tool: NodeExecutor = async ({ node, context, outgoing, runtime, meta }) =>
     context: next,
     detail: result.status === 'ok' ? `${result.toolName} executed` : `${result.toolName} failed`,
     nextEdgeId: firstEdgeId(outgoing),
-    io: { toolId: result.toolId, toolName: result.toolName, inputs, outputs: result.outputs, latencyMs: result.latencyMs, status: result.status, error: result.error },
+    io: {
+      toolId: result.toolId,
+      toolName: result.toolName,
+      inputs,
+      outputs: result.outputs,
+      latencyMs: result.latencyMs,
+      status: result.status,
+      error: result.error,
+    },
     variablesSet: Object.keys(variablesSet).length ? variablesSet : undefined,
   };
 };
@@ -139,15 +179,22 @@ const decision: NodeExecutor = async ({ node, context, outgoing }) => {
   for (const edge of outgoing) {
     if (edge.condition) {
       const result = evaluatePredicate(context, edge.condition);
-      conditionEvals.push({ expression: describePredicateWithValues(context, edge.condition), result, branch: edge.label });
+      conditionEvals.push({
+        expression: describePredicateWithValues(context, edge.condition),
+        result,
+        branch: edge.label,
+      });
       if (result && !chosen) chosen = edge;
     }
   }
   if (!chosen) {
-    chosen = outgoing.find((edge) => edge.else) ?? outgoing.find((edge) => !edge.condition) ?? outgoing[0];
+    chosen =
+      outgoing.find((edge) => edge.else) ?? outgoing.find((edge) => !edge.condition) ?? outgoing[0];
     if (chosen) conditionEvals.push({ expression: 'else', result: true, branch: chosen.label });
   }
-  const next = chosen?.label ? setValue(context, { scope: 'metadata', key: node.label }, chosen.label) : context;
+  const next = chosen?.label
+    ? setValue(context, { scope: 'metadata', key: node.label }, chosen.label)
+    : context;
   return {
     context: next,
     detail: chosen?.label ? `Evaluated → ${chosen.label}` : 'Condition evaluated',
@@ -163,7 +210,10 @@ const transfer: NodeExecutor = async ({ node, context, outgoing }) => ({
 });
 
 const end: NodeExecutor = async ({ context }) => {
-  const next = 'outcome' in context.variables ? setValue(context, { scope: 'variables', key: 'outcome' }, 'Completed') : context;
+  const next =
+    'outcome' in context.variables
+      ? setValue(context, { scope: 'variables', key: 'outcome' }, 'Completed')
+      : context;
   return {
     context: next,
     detail: 'Run summary generated',

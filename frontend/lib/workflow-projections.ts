@@ -11,16 +11,37 @@ import type { ContextScope } from '@/lib/workflow-context';
 import type { ExecutionEvent } from '@/lib/workflow-events';
 import type { ConversationTurn } from '@/lib/conversation-types';
 
-export type StateTransition = { seq: number; t: number; nodeId?: string; scope: ContextScope; key: string; from?: WorkflowValue; to?: WorkflowValue };
-export type ToolCall = { stepId?: string; nodeId?: string; t: number; toolId: string; toolName: string; inputs: Record<string, WorkflowValue>; outputs?: Record<string, WorkflowValue> };
+export type StateTransition = {
+  seq: number;
+  t: number;
+  nodeId?: string;
+  scope: ContextScope;
+  key: string;
+  from?: WorkflowValue;
+  to?: WorkflowValue;
+};
+export type ToolCall = {
+  stepId?: string;
+  nodeId?: string;
+  t: number;
+  toolId: string;
+  toolName: string;
+  inputs: Record<string, WorkflowValue>;
+  outputs?: Record<string, WorkflowValue>;
+};
 
 export function projectPath(events: readonly ExecutionEvent[]): string[] {
-  return events.filter((event) => event.type === 'node.entered' && event.nodeId).map((event) => event.nodeId as string);
+  return events
+    .filter((event) => event.type === 'node.entered' && event.nodeId)
+    .map((event) => event.nodeId as string);
 }
 
 export function projectContext(events: readonly ExecutionEvent[]): WorkflowContext {
   const started = events.find((event) => event.type === 'run.started');
-  const base = started && started.type === 'run.started' ? started.initial : { variables: {}, session: {}, metadata: {} };
+  const base =
+    started && started.type === 'run.started'
+      ? started.initial
+      : { variables: {}, session: {}, metadata: {} };
   const context: WorkflowContext = {
     variables: { ...base.variables },
     session: { ...base.session },
@@ -43,7 +64,15 @@ export function projectStateTransitions(events: readonly ExecutionEvent[]): Stat
     .filter((event) => event.type === 'state.changed')
     .map((event) => {
       const change = event as Extract<ExecutionEvent, { type: 'state.changed' }>;
-      return { seq: change.seq, t: change.t, nodeId: change.nodeId, scope: change.scope, key: change.key, from: change.from, to: change.to };
+      return {
+        seq: change.seq,
+        t: change.t,
+        nodeId: change.nodeId,
+        scope: change.scope,
+        key: change.key,
+        from: change.from,
+        to: change.to,
+      };
     });
 }
 
@@ -53,13 +82,28 @@ export function projectToolCalls(events: readonly ExecutionEvent[]): ToolCall[] 
   for (const event of events) {
     const stepKey = event.stepId ?? event.eventId;
     if (event.type === 'tool.invoked') {
-      byStep.set(stepKey, { stepId: event.stepId, nodeId: event.nodeId, t: event.t, toolId: event.toolId, toolName: event.toolName, inputs: event.inputs });
+      byStep.set(stepKey, {
+        stepId: event.stepId,
+        nodeId: event.nodeId,
+        t: event.t,
+        toolId: event.toolId,
+        toolName: event.toolName,
+        inputs: event.inputs,
+      });
       order.push(stepKey);
     } else if (event.type === 'tool.returned') {
       const existing = byStep.get(stepKey);
       if (existing) existing.outputs = event.outputs;
       else {
-        byStep.set(stepKey, { stepId: event.stepId, nodeId: event.nodeId, t: event.t, toolId: event.toolId, toolName: event.toolName, inputs: {}, outputs: event.outputs });
+        byStep.set(stepKey, {
+          stepId: event.stepId,
+          nodeId: event.nodeId,
+          t: event.t,
+          toolId: event.toolId,
+          toolName: event.toolName,
+          inputs: {},
+          outputs: event.outputs,
+        });
         order.push(stepKey);
       }
     }
@@ -94,14 +138,33 @@ export function projectTurns(events: readonly ExecutionEvent[]): ConversationTur
   let currentConsultationId: string | undefined;
 
   for (const event of events) {
-    const sameConsultation = current !== null && typeof currentConsultationId === 'string' && event.consultationId === currentConsultationId;
+    const sameConsultation =
+      current !== null &&
+      typeof currentConsultationId === 'string' &&
+      event.consultationId === currentConsultationId;
 
     if (event.type === 'turn.started') {
-      current = { sessionId: event.sessionId, seq: event.seq, t: event.t, speaker: event.speaker, origin: event.origin, status: 'in_progress', turnId: event.turnId };
+      current = {
+        sessionId: event.sessionId,
+        seq: event.seq,
+        t: event.t,
+        speaker: event.speaker,
+        origin: event.origin,
+        status: 'in_progress',
+        turnId: event.turnId,
+      };
       currentConsultationId = event.consultationId;
       turns.push(current);
     } else if (event.type === 'conversation.turn') {
-      current = { sessionId: event.sessionId, seq: event.seq, t: event.t, speaker: event.speaker, text: event.text, status: 'completed', turnId: event.turnId };
+      current = {
+        sessionId: event.sessionId,
+        seq: event.seq,
+        t: event.t,
+        speaker: event.speaker,
+        text: event.text,
+        status: 'completed',
+        turnId: event.turnId,
+      };
       currentConsultationId = event.consultationId;
       turns.push(current);
     } else if (event.type === 'turn.interrupted' && sameConsultation && current) {
@@ -110,7 +173,12 @@ export function projectTurns(events: readonly ExecutionEvent[]): ConversationTur
       current.interruptedBy = event.interruptedBy;
     } else if (event.type === 'directive.abandoned' && sameConsultation && current) {
       current.status = 'interrupted';
-    } else if (event.type === 'turn.completed' && sameConsultation && current && current.speaker === event.speaker) {
+    } else if (
+      event.type === 'turn.completed' &&
+      sameConsultation &&
+      current &&
+      current.speaker === event.speaker
+    ) {
       if (current.status !== 'interrupted') current.status = 'completed';
     } else if (event.type === 'intent.detected' && sameConsultation && current) {
       current.intent = event.intent;

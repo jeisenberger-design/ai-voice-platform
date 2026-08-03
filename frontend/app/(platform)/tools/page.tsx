@@ -29,7 +29,10 @@ export default function ToolsPage() {
       ['Total tools', data.length.toString()],
       ['Active', data.filter((tool) => tool.status === 'Active').length.toString()],
       ['Drafts', data.filter((tool) => tool.status === 'Draft').length.toString()],
-      ['Calls this month', data.reduce((sum, tool) => sum + tool.callsThisMonth, 0).toLocaleString()],
+      [
+        'Calls this month',
+        data.reduce((sum, tool) => sum + tool.callsThisMonth, 0).toLocaleString(),
+      ],
     ],
     [data],
   );

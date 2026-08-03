@@ -27,7 +27,9 @@ export function ToolTable({ tools }: { tools: Tool[] }) {
                   <Link href={`/tools/${tool.id}`} className="font-medium hover:underline">
                     {tool.name}
                   </Link>
-                  <p className="mt-0.5 max-w-sm truncate text-xs text-muted-foreground">{tool.description}</p>
+                  <p className="mt-0.5 max-w-sm truncate text-xs text-muted-foreground">
+                    {tool.description}
+                  </p>
                 </td>
                 <td className="px-5 py-4 text-muted-foreground">{tool.category}</td>
                 <td className="px-5 py-4 text-muted-foreground">{tool.kind}</td>
@@ -44,7 +46,9 @@ export function ToolTable({ tools }: { tools: Tool[] }) {
                 <td className="px-5 py-4">{tool.callsThisMonth.toLocaleString()}</td>
                 <td className="px-5 py-4">{tool.callsThisMonth ? `${tool.successRate}%` : '—'}</td>
                 <td className="px-5 py-4">
-                  <Badge variant={tool.status === 'Active' ? 'success' : 'neutral'}>{tool.status}</Badge>
+                  <Badge variant={tool.status === 'Active' ? 'success' : 'neutral'}>
+                    {tool.status}
+                  </Badge>
                 </td>
                 <td className="px-5 py-4">
                   <Link href={`/tools/${tool.id}`} aria-label={`Open ${tool.name}`}>
@@ -57,7 +61,9 @@ export function ToolTable({ tools }: { tools: Tool[] }) {
         </table>
       </div>
       {tools.length === 0 && (
-        <div className="p-12 text-center text-sm text-muted-foreground">No tools match the current filters.</div>
+        <div className="p-12 text-center text-sm text-muted-foreground">
+          No tools match the current filters.
+        </div>
       )}
     </Card>
   );

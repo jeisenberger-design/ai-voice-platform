@@ -27,25 +27,46 @@ export type WorkflowContext = {
   metadata: Record<string, WorkflowValue>;
 };
 
-export type WorkflowVariable = { name: string; type: ValueType; initial?: WorkflowValue; description?: string };
-export type TriggerSeed = { session?: Record<string, WorkflowValue>; variables?: Record<string, WorkflowValue> };
+export type WorkflowVariable = {
+  name: string;
+  type: ValueType;
+  initial?: WorkflowValue;
+  description?: string;
+};
+export type TriggerSeed = {
+  session?: Record<string, WorkflowValue>;
+  variables?: Record<string, WorkflowValue>;
+};
 
-const defaultForType = (type: ValueType): WorkflowValue => (type === 'number' ? 0 : type === 'boolean' ? false : '');
+const defaultForType = (type: ValueType): WorkflowValue =>
+  type === 'number' ? 0 : type === 'boolean' ? false : '';
 
 export function createInitialContext(variables: WorkflowVariable[]): WorkflowContext {
   const vars: Record<string, WorkflowValue> = {};
   for (const declaration of variables) {
     vars[declaration.name] = declaration.initial ?? defaultForType(declaration.type);
   }
-  return { variables: vars, conversation: [], session: { callId: 'sim-call', channel: 'Voice' }, metadata: {} };
+  return {
+    variables: vars,
+    conversation: [],
+    session: { callId: 'sim-call', channel: 'Voice' },
+    metadata: {},
+  };
 }
 
-export function resolveOperand(context: WorkflowContext, operand: Operand): WorkflowValue | undefined {
+export function resolveOperand(
+  context: WorkflowContext,
+  operand: Operand,
+): WorkflowValue | undefined {
   if (operand.kind === 'literal') return operand.value;
   return context[operand.ref.scope][operand.ref.key];
 }
 
-export function setValue(context: WorkflowContext, ref: VarRef, value: WorkflowValue): WorkflowContext {
+export function setValue(
+  context: WorkflowContext,
+  ref: VarRef,
+  value: WorkflowValue,
+): WorkflowContext {
   return { ...context, [ref.scope]: { ...context[ref.scope], [ref.key]: value } };
 }
 

@@ -1,5 +1,14 @@
 'use client';
-import { BookOpen, Bot, CircleCheck, GitFork, MessageSquare, PhoneIncoming, ArrowRightLeft, Wrench } from 'lucide-react';
+import {
+  BookOpen,
+  Bot,
+  CircleCheck,
+  GitFork,
+  MessageSquare,
+  PhoneIncoming,
+  ArrowRightLeft,
+  Wrench,
+} from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { Workflow, WorkflowNodeKind } from '@/lib/mock-workflows';
 import type { NodeRunStatus } from '@/lib/workflow-execution';
@@ -59,7 +68,14 @@ export function WorkflowGraph({
             <marker id="wf-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
               <path d="M0,0 L6,3 L0,6 Z" className="fill-border" />
             </marker>
-            <marker id="wf-arrow-active" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <marker
+              id="wf-arrow-active"
+              markerWidth="8"
+              markerHeight="8"
+              refX="6"
+              refY="3"
+              orient="auto"
+            >
               <path d="M0,0 L6,3 L0,6 Z" className="fill-emerald-500" />
             </marker>
           </defs>
@@ -86,8 +102,20 @@ export function WorkflowGraph({
                 />
                 {edge.label && (
                   <g>
-                    <rect x={midX - 30} y={midY - 10} width={60} height={20} rx={6} className="fill-background stroke-border" />
-                    <text x={midX} y={midY + 4} textAnchor="middle" className="fill-muted-foreground text-[11px]">
+                    <rect
+                      x={midX - 30}
+                      y={midY - 10}
+                      width={60}
+                      height={20}
+                      rx={6}
+                      className="fill-background stroke-border"
+                    />
+                    <text
+                      x={midX}
+                      y={midY + 4}
+                      textAnchor="middle"
+                      className="fill-muted-foreground text-[11px]"
+                    >
                       {edge.label}
                     </text>
                   </g>

@@ -1,19 +1,184 @@
 import type { WorkflowValue } from '@/lib/workflow-context';
 
-export type ToolParameter = { name: string; type: 'string'|'number'|'boolean'|'enum'; description: string; required: boolean; options?: string[] };
-export type ToolOutput = { name: string; type: 'string'|'number'|'boolean'; description: string };
+export type ToolParameter = {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'enum';
+  description: string;
+  required: boolean;
+  options?: string[];
+};
+export type ToolOutput = {
+  name: string;
+  type: 'string' | 'number' | 'boolean';
+  description: string;
+};
 export type ToolAuth = 'None' | 'API Key' | 'OAuth';
 export type ToolKind = 'Built-in' | 'Custom API' | 'Webhook';
-export type Tool = { id: string; name: string; description: string; category: 'Scheduling'|'CRM'|'Data'|'Communication'|'Custom'; kind: ToolKind; endpoint?: string; authType: ToolAuth; parameters: ToolParameter[]; outputs: ToolOutput[]; mockResult: Record<string, WorkflowValue>; status: 'Active'|'Draft'; usedByAgents: string[]; callsThisMonth: number; successRate: number; updated: string };
+export type Tool = {
+  id: string;
+  name: string;
+  description: string;
+  category: 'Scheduling' | 'CRM' | 'Data' | 'Communication' | 'Custom';
+  kind: ToolKind;
+  endpoint?: string;
+  authType: ToolAuth;
+  parameters: ToolParameter[];
+  outputs: ToolOutput[];
+  mockResult: Record<string, WorkflowValue>;
+  status: 'Active' | 'Draft';
+  usedByAgents: string[];
+  callsThisMonth: number;
+  successRate: number;
+  updated: string;
+};
 
 export const tools: Tool[] = [
- {id:'tool_calendar_availability',name:'Calendar availability',description:'Checks open calendar slots before offering a booking time.',category:'Scheduling',kind:'Built-in',authType:'None',parameters:[{name:'date',type:'string',description:'ISO date to check availability for.',required:true},{name:'duration_minutes',type:'number',description:'Requested meeting length in minutes.',required:false}],outputs:[{name:'slot',type:'string',description:'The first available slot.'}],mockResult:{slot:'Tue 2:00 PM'},status:'Active',usedByAgents:['a1','a3'],callsThisMonth:412,successRate:98.2,updated:'Jul 12, 2026'},
- {id:'tool_crm_lookup',name:'CRM lookup',description:'Looks up an existing customer or lead record by phone number.',category:'CRM',kind:'Custom API',endpoint:'https://api.acmehealthcare.com/crm/lookup',authType:'API Key',parameters:[{name:'phone',type:'string',description:'Caller phone number in E.164 format.',required:true}],outputs:[{name:'customer_status',type:'string',description:'"new" or "existing".'},{name:'account_id',type:'string',description:'CRM account id, if found.'}],mockResult:{customer_status:'new',account_id:''},status:'Active',usedByAgents:['a1','a2'],callsThisMonth:867,successRate:95.4,updated:'Jul 10, 2026'},
- {id:'tool_create_lead',name:'Create lead',description:'Creates a new qualified lead record after a discovery call.',category:'CRM',kind:'Custom API',endpoint:'https://api.acmehealthcare.com/crm/leads',authType:'API Key',parameters:[{name:'name',type:'string',description:'Caller full name.',required:true},{name:'company',type:'string',description:'Caller company, if known.',required:false},{name:'priority',type:'enum',description:'Qualification priority.',required:true,options:['Low','Medium','High']}],outputs:[{name:'lead_id',type:'string',description:'The created lead id.'}],mockResult:{lead_id:'LD-4821'},status:'Active',usedByAgents:['a1'],callsThisMonth:214,successRate:99.1,updated:'Jul 9, 2026'},
- {id:'tool_send_followup',name:'Send follow-up',description:'Sends a follow-up SMS or email after the call ends.',category:'Communication',kind:'Webhook',endpoint:'https://hooks.acmehealthcare.com/followup',authType:'OAuth',parameters:[{name:'contact_id',type:'string',description:'CRM contact identifier.',required:true},{name:'message',type:'string',description:'Follow-up message body.',required:true}],outputs:[{name:'message_id',type:'string',description:'The queued message id.'}],mockResult:{message_id:'MSG-7781'},status:'Draft',usedByAgents:[],callsThisMonth:0,successRate:0,updated:'Jul 8, 2026'},
- {id:'tool_transfer_billing',name:'Transfer to billing',description:'Transfers the caller to the billing queue with a short summary.',category:'Communication',kind:'Built-in',authType:'None',parameters:[{name:'reason',type:'string',description:'Short reason for the transfer, shared with the receiving queue.',required:true}],outputs:[{name:'queue',type:'string',description:'The queue the caller was routed to.'}],mockResult:{queue:'Care team'},status:'Active',usedByAgents:['a2'],callsThisMonth:96,successRate:100,updated:'Jul 14, 2026'}
+  {
+    id: 'tool_calendar_availability',
+    name: 'Calendar availability',
+    description: 'Checks open calendar slots before offering a booking time.',
+    category: 'Scheduling',
+    kind: 'Built-in',
+    authType: 'None',
+    parameters: [
+      {
+        name: 'date',
+        type: 'string',
+        description: 'ISO date to check availability for.',
+        required: true,
+      },
+      {
+        name: 'duration_minutes',
+        type: 'number',
+        description: 'Requested meeting length in minutes.',
+        required: false,
+      },
+    ],
+    outputs: [{ name: 'slot', type: 'string', description: 'The first available slot.' }],
+    mockResult: { slot: 'Tue 2:00 PM' },
+    status: 'Active',
+    usedByAgents: ['a1', 'a3'],
+    callsThisMonth: 412,
+    successRate: 98.2,
+    updated: 'Jul 12, 2026',
+  },
+  {
+    id: 'tool_crm_lookup',
+    name: 'CRM lookup',
+    description: 'Looks up an existing customer or lead record by phone number.',
+    category: 'CRM',
+    kind: 'Custom API',
+    endpoint: 'https://api.acmehealthcare.com/crm/lookup',
+    authType: 'API Key',
+    parameters: [
+      {
+        name: 'phone',
+        type: 'string',
+        description: 'Caller phone number in E.164 format.',
+        required: true,
+      },
+    ],
+    outputs: [
+      { name: 'customer_status', type: 'string', description: '"new" or "existing".' },
+      { name: 'account_id', type: 'string', description: 'CRM account id, if found.' },
+    ],
+    mockResult: { customer_status: 'new', account_id: '' },
+    status: 'Active',
+    usedByAgents: ['a1', 'a2'],
+    callsThisMonth: 867,
+    successRate: 95.4,
+    updated: 'Jul 10, 2026',
+  },
+  {
+    id: 'tool_create_lead',
+    name: 'Create lead',
+    description: 'Creates a new qualified lead record after a discovery call.',
+    category: 'CRM',
+    kind: 'Custom API',
+    endpoint: 'https://api.acmehealthcare.com/crm/leads',
+    authType: 'API Key',
+    parameters: [
+      { name: 'name', type: 'string', description: 'Caller full name.', required: true },
+      {
+        name: 'company',
+        type: 'string',
+        description: 'Caller company, if known.',
+        required: false,
+      },
+      {
+        name: 'priority',
+        type: 'enum',
+        description: 'Qualification priority.',
+        required: true,
+        options: ['Low', 'Medium', 'High'],
+      },
+    ],
+    outputs: [{ name: 'lead_id', type: 'string', description: 'The created lead id.' }],
+    mockResult: { lead_id: 'LD-4821' },
+    status: 'Active',
+    usedByAgents: ['a1'],
+    callsThisMonth: 214,
+    successRate: 99.1,
+    updated: 'Jul 9, 2026',
+  },
+  {
+    id: 'tool_send_followup',
+    name: 'Send follow-up',
+    description: 'Sends a follow-up SMS or email after the call ends.',
+    category: 'Communication',
+    kind: 'Webhook',
+    endpoint: 'https://hooks.acmehealthcare.com/followup',
+    authType: 'OAuth',
+    parameters: [
+      {
+        name: 'contact_id',
+        type: 'string',
+        description: 'CRM contact identifier.',
+        required: true,
+      },
+      { name: 'message', type: 'string', description: 'Follow-up message body.', required: true },
+    ],
+    outputs: [{ name: 'message_id', type: 'string', description: 'The queued message id.' }],
+    mockResult: { message_id: 'MSG-7781' },
+    status: 'Draft',
+    usedByAgents: [],
+    callsThisMonth: 0,
+    successRate: 0,
+    updated: 'Jul 8, 2026',
+  },
+  {
+    id: 'tool_transfer_billing',
+    name: 'Transfer to billing',
+    description: 'Transfers the caller to the billing queue with a short summary.',
+    category: 'Communication',
+    kind: 'Built-in',
+    authType: 'None',
+    parameters: [
+      {
+        name: 'reason',
+        type: 'string',
+        description: 'Short reason for the transfer, shared with the receiving queue.',
+        required: true,
+      },
+    ],
+    outputs: [
+      { name: 'queue', type: 'string', description: 'The queue the caller was routed to.' },
+    ],
+    mockResult: { queue: 'Care team' },
+    status: 'Active',
+    usedByAgents: ['a2'],
+    callsThisMonth: 96,
+    successRate: 100,
+    updated: 'Jul 14, 2026',
+  },
 ];
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 120));
-export async function mockTools() { await wait(); return tools; }
-export async function mockTool(id: string) { await wait(); return tools.find((tool) => tool.id === id) ?? null; }
+export async function mockTools() {
+  await wait();
+  return tools;
+}
+export async function mockTool(id: string) {
+  await wait();
+  return tools.find((tool) => tool.id === id) ?? null;
+}

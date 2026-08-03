@@ -10,14 +10,7 @@ import type { Operand, TriggerSeed, VarRef, WorkflowVariable } from '@/lib/workf
 import type { Predicate } from '@/lib/workflow-predicates';
 
 export type WorkflowNodeKind =
-  | 'trigger'
-  | 'agent'
-  | 'tool'
-  | 'knowledge'
-  | 'decision'
-  | 'transfer'
-  | 'message'
-  | 'end';
+  'trigger' | 'agent' | 'tool' | 'knowledge' | 'decision' | 'transfer' | 'message' | 'end';
 
 export type WorkflowNodeRef = { type: 'agent' | 'tool' | 'knowledge'; id: string };
 
@@ -81,8 +74,21 @@ const salesQualification: Pick<Workflow, 'variables' | 'nodes' | 'edges'> = {
     { name: 'outcome', type: 'string', description: 'Final call outcome.' },
   ],
   nodes: [
-    { id: 'n1', kind: 'trigger', label: 'Inbound call', description: 'Sales line', position: { x: 300, y: 20 }, seed: { session: { channel: 'Voice', callerPhone: '555-0142' } } },
-    { id: 'n2', kind: 'agent', label: 'Avery greets caller', ref: { type: 'agent', id: 'a1' }, position: { x: 300, y: 130 } },
+    {
+      id: 'n1',
+      kind: 'trigger',
+      label: 'Inbound call',
+      description: 'Sales line',
+      position: { x: 300, y: 20 },
+      seed: { session: { channel: 'Voice', callerPhone: '555-0142' } },
+    },
+    {
+      id: 'n2',
+      kind: 'agent',
+      label: 'Avery greets caller',
+      ref: { type: 'agent', id: 'a1' },
+      position: { x: 300, y: 130 },
+    },
     {
       id: 'n3',
       kind: 'tool',
@@ -93,7 +99,13 @@ const salesQualification: Pick<Workflow, 'variables' | 'nodes' | 'edges'> = {
       outputMappings: [{ output: 'customer_status', target: v('customer_status') }],
     },
     { id: 'n4', kind: 'decision', label: 'Existing customer?', position: { x: 300, y: 350 } },
-    { id: 'n5', kind: 'knowledge', label: 'Answer from knowledge', ref: { type: 'knowledge', id: 'support-knowledge-base' }, position: { x: 40, y: 470 } },
+    {
+      id: 'n5',
+      kind: 'knowledge',
+      label: 'Answer from knowledge',
+      ref: { type: 'knowledge', id: 'support-knowledge-base' },
+      position: { x: 40, y: 470 },
+    },
     {
       id: 'n6',
       kind: 'tool',
@@ -113,7 +125,13 @@ const salesQualification: Pick<Workflow, 'variables' | 'nodes' | 'edges'> = {
     { id: 'e1', source: 'n1', target: 'n2' },
     { id: 'e2', source: 'n2', target: 'n3' },
     { id: 'e3', source: 'n3', target: 'n4' },
-    { id: 'e4', source: 'n4', target: 'n6', label: 'New', condition: { left: refOp(v('customer_status')), op: '==', right: lit('new') } },
+    {
+      id: 'e4',
+      source: 'n4',
+      target: 'n6',
+      label: 'New',
+      condition: { left: refOp(v('customer_status')), op: '==', right: lit('new') },
+    },
     { id: 'e5', source: 'n4', target: 'n5', label: 'Existing', else: true },
     { id: 'e6', source: 'n6', target: 'n7' },
     { id: 'e7', source: 'n5', target: 'n7' },
@@ -127,9 +145,31 @@ const supportTriage: Pick<Workflow, 'variables' | 'nodes' | 'edges'> = {
     { name: 'outcome', type: 'string', description: 'Final call outcome.' },
   ],
   nodes: [
-    { id: 'n1', kind: 'trigger', label: 'Inbound call', description: 'Support line', position: { x: 300, y: 20 }, seed: { session: { channel: 'Voice', callerPhone: '555-0114' }, variables: { urgency: 'high' } } },
-    { id: 'n2', kind: 'agent', label: 'Morgan handles caller', ref: { type: 'agent', id: 'a2' }, position: { x: 300, y: 130 } },
-    { id: 'n3', kind: 'knowledge', label: 'Retrieve support answer', ref: { type: 'knowledge', id: 'support-knowledge-base' }, position: { x: 300, y: 240 } },
+    {
+      id: 'n1',
+      kind: 'trigger',
+      label: 'Inbound call',
+      description: 'Support line',
+      position: { x: 300, y: 20 },
+      seed: {
+        session: { channel: 'Voice', callerPhone: '555-0114' },
+        variables: { urgency: 'high' },
+      },
+    },
+    {
+      id: 'n2',
+      kind: 'agent',
+      label: 'Morgan handles caller',
+      ref: { type: 'agent', id: 'a2' },
+      position: { x: 300, y: 130 },
+    },
+    {
+      id: 'n3',
+      kind: 'knowledge',
+      label: 'Retrieve support answer',
+      ref: { type: 'knowledge', id: 'support-knowledge-base' },
+      position: { x: 300, y: 240 },
+    },
     { id: 'n4', kind: 'decision', label: 'Urgent issue?', position: { x: 300, y: 350 } },
     {
       id: 'n5',
@@ -146,7 +186,13 @@ const supportTriage: Pick<Workflow, 'variables' | 'nodes' | 'edges'> = {
     { id: 'e1', source: 'n1', target: 'n2' },
     { id: 'e2', source: 'n2', target: 'n3' },
     { id: 'e3', source: 'n3', target: 'n4' },
-    { id: 'e4', source: 'n4', target: 'n5', label: 'Urgent', condition: { left: refOp(v('urgency')), op: '==', right: lit('high') } },
+    {
+      id: 'e4',
+      source: 'n4',
+      target: 'n5',
+      label: 'Urgent',
+      condition: { left: refOp(v('urgency')), op: '==', right: lit('high') },
+    },
     { id: 'e5', source: 'n4', target: 'n6', label: 'Routine', else: true },
     { id: 'e6', source: 'n5', target: 'n7' },
     { id: 'e7', source: 'n6', target: 'n7' },
@@ -155,11 +201,21 @@ const supportTriage: Pick<Workflow, 'variables' | 'nodes' | 'edges'> = {
 
 const afterHoursVoicemail: Pick<Workflow, 'variables' | 'nodes' | 'edges'> = {
   variables: [
-    { name: 'callback_id', type: 'string', description: 'Set when the callback request is captured.' },
+    {
+      name: 'callback_id',
+      type: 'string',
+      description: 'Set when the callback request is captured.',
+    },
     { name: 'outcome', type: 'string', description: 'Final call outcome.' },
   ],
   nodes: [
-    { id: 'n1', kind: 'trigger', label: 'After-hours call', position: { x: 300, y: 20 }, seed: { session: { channel: 'Voice', callerPhone: '555-0185' } } },
+    {
+      id: 'n1',
+      kind: 'trigger',
+      label: 'After-hours call',
+      position: { x: 300, y: 20 },
+      seed: { session: { channel: 'Voice', callerPhone: '555-0185' } },
+    },
     { id: 'n2', kind: 'message', label: 'Play after-hours greeting', position: { x: 300, y: 130 } },
     {
       id: 'n3',
@@ -186,7 +242,8 @@ export const workflows: Workflow[] = [
   {
     id: 'wf_sales_qualification',
     name: 'Inbound Sales Qualification',
-    description: 'Greets inbound prospects, checks the CRM, and either books a consultation or captures a new lead.',
+    description:
+      'Greets inbound prospects, checks the CRM, and either books a consultation or captures a new lead.',
     status: 'Live',
     trigger: 'Inbound call · Sales line',
     version: 7,
@@ -202,7 +259,8 @@ export const workflows: Workflow[] = [
   {
     id: 'wf_support_triage',
     name: 'Support Triage',
-    description: 'Answers tier-one questions from knowledge and escalates urgent issues to the care team.',
+    description:
+      'Answers tier-one questions from knowledge and escalates urgent issues to the care team.',
     status: 'Live',
     trigger: 'Inbound call · Support line',
     version: 4,

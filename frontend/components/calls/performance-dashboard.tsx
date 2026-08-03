@@ -1,3 +1,91 @@
 'use client';
-import { useCallPerformance } from '@/hooks/use-platform-data'; import { Card, Badge } from '@/components/ui';
-export function PerformanceDashboard(){const {data}=useCallPerformance();if(!data)return <div className="grid gap-4 md:grid-cols-5">{Array.from({length:5},(_,i)=><Card className="h-28 animate-pulse bg-muted" key={i}/>)}</div>;return <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{data.metrics.map(([label,value,change])=><Card className="p-4" key={label}><p className="text-sm text-muted-foreground">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p><p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">{change} <span className="text-muted-foreground">vs. prior period</span></p></Card>)}</div><div className="mt-6 grid gap-6 xl:grid-cols-5"><Card className="overflow-hidden xl:col-span-3"><div className="border-b p-5"><h2 className="font-medium">Agent comparison</h2><p className="mt-1 text-sm text-muted-foreground">Performance for the last 30 days.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="bg-muted/40 text-xs text-muted-foreground"><tr>{['Agent','Calls','Success rate','Avg duration','Transfer rate','Quality'].map(label=><th className="px-5 py-3 font-medium" key={label}>{label}</th>)}</tr></thead><tbody>{data.agents.map(agent=><tr className="border-t" key={agent[0]}>{agent.map((value,index)=><td className="px-5 py-4" key={index}>{index===0?<span className="font-medium">{value}</span>:index===5?<Badge variant="success">{value}</Badge>:value}</td>)}</tr>)}</tbody></table></div></Card><Card className="p-5 xl:col-span-2"><h2 className="font-medium">Intent analysis</h2><p className="mt-1 text-sm text-muted-foreground">Top classified intents</p><div className="mt-6 space-y-4">{data.intents.map(([label,value])=><div key={label}><div className="flex justify-between text-sm"><span>{label}</span><span className="text-muted-foreground">{value}%</span></div><div className="mt-2 h-2 rounded-full bg-muted"><div className="h-2 rounded-full bg-foreground" style={{width:`${value}%`}}/></div></div>)}</div></Card></div></>}
+import { useCallPerformance } from '@/hooks/use-platform-data';
+import { Card, Badge } from '@/components/ui';
+export function PerformanceDashboard() {
+  const { data } = useCallPerformance();
+  if (!data)
+    return (
+      <div className="grid gap-4 md:grid-cols-5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <Card className="h-28 animate-pulse bg-muted" key={i} />
+        ))}
+      </div>
+    );
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {data.metrics.map(([label, value, change]) => (
+          <Card className="p-4" key={label}>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-3 text-2xl font-semibold">{value}</p>
+            <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+              {change} <span className="text-muted-foreground">vs. prior period</span>
+            </p>
+          </Card>
+        ))}
+      </div>
+      <div className="mt-6 grid gap-6 xl:grid-cols-5">
+        <Card className="overflow-hidden xl:col-span-3">
+          <div className="border-b p-5">
+            <h2 className="font-medium">Agent comparison</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Performance for the last 30 days.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left text-sm">
+              <thead className="bg-muted/40 text-xs text-muted-foreground">
+                <tr>
+                  {[
+                    'Agent',
+                    'Calls',
+                    'Success rate',
+                    'Avg duration',
+                    'Transfer rate',
+                    'Quality',
+                  ].map((label) => (
+                    <th className="px-5 py-3 font-medium" key={label}>
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.agents.map((agent) => (
+                  <tr className="border-t" key={agent[0]}>
+                    {agent.map((value, index) => (
+                      <td className="px-5 py-4" key={index}>
+                        {index === 0 ? (
+                          <span className="font-medium">{value}</span>
+                        ) : index === 5 ? (
+                          <Badge variant="success">{value}</Badge>
+                        ) : (
+                          value
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+        <Card className="p-5 xl:col-span-2">
+          <h2 className="font-medium">Intent analysis</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Top classified intents</p>
+          <div className="mt-6 space-y-4">
+            {data.intents.map(([label, value]) => (
+              <div key={label}>
+                <div className="flex justify-between text-sm">
+                  <span>{label}</span>
+                  <span className="text-muted-foreground">{value}%</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-muted">
+                  <div className="h-2 rounded-full bg-foreground" style={{ width: `${value}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </>
+  );
+}

@@ -11,7 +11,10 @@ beforeEach(() => {
   seq = 0;
 });
 
-function event(payload: ExecutionEventPayload, overrides: Partial<EventIdentity> = {}): ExecutionEvent {
+function event(
+  payload: ExecutionEventPayload,
+  overrides: Partial<EventIdentity> = {},
+): ExecutionEvent {
   const s = overrides.seq ?? seq++;
   const identity: EventIdentity = {
     schemaVersion: 1,
@@ -38,7 +41,12 @@ describe('projectTurns', () => {
     const turns = projectTurns(events);
 
     expect(turns).toHaveLength(1);
-    expect(turns[0]).toMatchObject({ sessionId: 'sess_test', speaker: 'caller', text: 'Hello there', status: 'completed' });
+    expect(turns[0]).toMatchObject({
+      sessionId: 'sess_test',
+      speaker: 'caller',
+      text: 'Hello there',
+      status: 'completed',
+    });
     // Neither event carries these — must be represented as absent, not invented.
     expect(turns[0].turnId).toBeUndefined();
     expect(turns[0].origin).toBeUndefined();
@@ -94,7 +102,10 @@ describe('projectTurns', () => {
 
   it('does not attribute a decorating event to a turn from a different consultation', () => {
     const events = [
-      event({ type: 'conversation.turn', speaker: 'agent', text: 'First consultation turn' }, { consultationId: 'run_test-c00' }),
+      event(
+        { type: 'conversation.turn', speaker: 'agent', text: 'First consultation turn' },
+        { consultationId: 'run_test-c00' },
+      ),
       // A decorating event tagged to an unrelated consultation must not reach back
       // into the turn opened above.
       event({ type: 'intent.detected', intent: 'unrelated' }, { consultationId: 'run_test-c01' }),

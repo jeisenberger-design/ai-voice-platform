@@ -6,12 +6,17 @@ import { Badge, Button, Card } from '@/components/ui';
 import { agents } from '@/lib/mock-data';
 import { tools } from '@/lib/mock-tools';
 import type { Workflow } from '@/lib/mock-workflows';
-import { simulateWorkflowRun, type NodeRunStatus, type WorkflowRun } from '@/lib/workflow-execution';
+import {
+  simulateWorkflowRun,
+  type NodeRunStatus,
+  type WorkflowRun,
+} from '@/lib/workflow-execution';
 import { WorkflowGraph } from '@/components/workflows/workflow-graph';
 import { WorkflowRunPanel } from '@/components/workflows/workflow-run-panel';
 
 const STEP_DELAY = 750;
-const statusVariant = (status: Workflow['status']) => (status === 'Live' ? 'success' : status === 'Paused' ? 'warning' : 'neutral');
+const statusVariant = (status: Workflow['status']) =>
+  status === 'Live' ? 'success' : status === 'Paused' ? 'warning' : 'neutral';
 
 export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
   const [run, setRun] = useState<WorkflowRun | null>(null);
@@ -72,7 +77,10 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
   return (
     <>
       <header className="mb-6">
-        <Link href="/workflows" className="mb-4 flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/workflows"
+          className="mb-4 flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft size={15} />
           Workflows
         </Link>
@@ -98,20 +106,34 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
           <Card className="overflow-hidden">
             <div className="border-b p-5">
               <h2 className="font-medium">Execution graph</h2>
-              <p className="mt-1 text-sm text-muted-foreground">How this workflow orchestrates each call, step by step.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                How this workflow orchestrates each call, step by step.
+              </p>
             </div>
             <div className="p-4">
-              <WorkflowGraph workflow={workflow} statuses={statuses} activePath={run?.path ?? null} />
+              <WorkflowGraph
+                workflow={workflow}
+                statuses={statuses}
+                activePath={run?.path ?? null}
+              />
             </div>
           </Card>
         </div>
 
         <div className="space-y-6">
-          <WorkflowRunPanel run={run} activeIndex={activeIndex} running={running} onRun={startRun} onReset={resetRun} />
+          <WorkflowRunPanel
+            run={run}
+            activeIndex={activeIndex}
+            running={running}
+            onRun={startRun}
+            onReset={resetRun}
+          />
 
           <Card className="p-5">
             <h2 className="font-medium">Connections</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Resources this workflow orchestrates.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Resources this workflow orchestrates.
+            </p>
             <div className="mt-4 space-y-4">
               <div>
                 <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Agents</p>
@@ -120,7 +142,11 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
                 ) : (
                   <div className="space-y-2">
                     {linkedAgents.map((agent) => (
-                      <Link href={`/agents/${agent.id}`} className="flex items-center gap-2 text-sm hover:underline" key={agent.id}>
+                      <Link
+                        href={`/agents/${agent.id}`}
+                        className="flex items-center gap-2 text-sm hover:underline"
+                        key={agent.id}
+                      >
                         <Bot size={15} className="text-muted-foreground" />
                         {agent.name}
                       </Link>
@@ -135,7 +161,11 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
                 ) : (
                   <div className="space-y-2">
                     {linkedTools.map((tool) => (
-                      <Link href={`/tools/${tool.id}`} className="flex items-center gap-2 text-sm hover:underline" key={tool.id}>
+                      <Link
+                        href={`/tools/${tool.id}`}
+                        className="flex items-center gap-2 text-sm hover:underline"
+                        key={tool.id}
+                      >
                         <Wrench size={15} className="text-muted-foreground" />
                         {tool.name}
                       </Link>
@@ -144,7 +174,9 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
                 )}
               </div>
               <div>
-                <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Knowledge</p>
+                <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+                  Knowledge
+                </p>
                 {workflow.knowledgeSources.length === 0 ? (
                   <p className="text-sm text-muted-foreground">None</p>
                 ) : (
@@ -169,7 +201,9 @@ export function WorkflowDetail({ workflow }: { workflow: Workflow }) {
                 <p className="text-muted-foreground">Runs this month</p>
               </div>
               <div>
-                <p className="text-2xl font-semibold">{workflow.runsThisMonth ? `${workflow.successRate}%` : '—'}</p>
+                <p className="text-2xl font-semibold">
+                  {workflow.runsThisMonth ? `${workflow.successRate}%` : '—'}
+                </p>
                 <p className="text-muted-foreground">Success rate</p>
               </div>
               <div>

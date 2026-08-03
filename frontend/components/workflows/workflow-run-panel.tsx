@@ -21,7 +21,12 @@ import type { ComponentType } from 'react';
 import { Badge, Button, Card } from '@/components/ui';
 import { formatValue, type WorkflowValue } from '@/lib/workflow-context';
 import type { ExecutionEvent, ExecutionEventType } from '@/lib/workflow-events';
-import { projectConversation, projectStateTransitions, projectToolCalls, projectTurns } from '@/lib/workflow-projections';
+import {
+  projectConversation,
+  projectStateTransitions,
+  projectToolCalls,
+  projectTurns,
+} from '@/lib/workflow-projections';
 import type { WorkflowRun } from '@/lib/workflow-execution';
 import { cn } from '@/lib/utils';
 
@@ -33,7 +38,10 @@ const pairs = (entries: Record<string, WorkflowValue>) =>
     .map(([key, value]) => `${key}=${formatValue(value)}`)
     .join(', ');
 
-const eventIcon: Record<ExecutionEventType, ComponentType<{ size?: number; className?: string }>> = {
+const eventIcon: Record<
+  ExecutionEventType,
+  ComponentType<{ size?: number; className?: string }>
+> = {
   'run.started': Flag,
   'run.completed': CircleCheck,
   'node.entered': CornerDownRight,
@@ -89,10 +97,17 @@ export function WorkflowRunPanel({
     // consultation has been revealed, instead of showing them immediately — otherwise
     // they'd leak ahead of the node-by-node animation.
     const revealedConsultations = new Set(
-      run.events.filter((event) => event.nodeId && revealedNodes.has(event.nodeId) && event.consultationId).map((event) => event.consultationId as string),
+      run.events
+        .filter((event) => event.nodeId && revealedNodes.has(event.nodeId) && event.consultationId)
+        .map((event) => event.consultationId as string),
     );
     return run.events.filter((event) => {
-      if (event.type === 'run.completed' || event.type === 'runtime.completed' || event.type === 'session.ended') return finished;
+      if (
+        event.type === 'run.completed' ||
+        event.type === 'runtime.completed' ||
+        event.type === 'session.ended'
+      )
+        return finished;
       if (event.type === 'run.started' || event.type === 'session.opened') return true;
       if (event.nodeId) return revealedNodes.has(event.nodeId);
       if (event.consultationId) return revealedConsultations.has(event.consultationId);
@@ -103,7 +118,11 @@ export function WorkflowRunPanel({
   // turn.completed intentionally duplicates conversation.turn's content (see
   // conversation-runtime.ts) — it exists for projections, not as a second transcript
   // line, so it's hidden here the same way node.exited is.
-  const timeline = useMemo(() => revealed.filter((event) => event.type !== 'node.exited' && event.type !== 'turn.completed'), [revealed]);
+  const timeline = useMemo(
+    () =>
+      revealed.filter((event) => event.type !== 'node.exited' && event.type !== 'turn.completed'),
+    [revealed],
+  );
   const transitions = useMemo(() => projectStateTransitions(revealed), [revealed]);
   const toolCalls = useMemo(() => projectToolCalls(revealed), [revealed]);
   const conversation = useMemo(() => projectConversation(revealed), [revealed]);
@@ -122,7 +141,9 @@ export function WorkflowRunPanel({
       <div className="flex items-center justify-between border-b p-5">
         <div>
           <h2 className="font-medium">Test run</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Observe execution as an event stream. No calls are placed.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Observe execution as an event stream. No calls are placed.
+          </p>
         </div>
         <Badge variant={running ? 'success' : 'neutral'}>{running ? 'Running' : 'Mock'}</Badge>
       </div>
@@ -147,7 +168,9 @@ export function WorkflowRunPanel({
               <Sparkles size={18} />
             </div>
             <p className="mt-3 text-sm font-medium">Run a simulated execution</p>
-            <p className="mt-1 max-w-xs text-sm text-muted-foreground">Every view below is a projection of one immutable event stream.</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+              Every view below is a projection of one immutable event stream.
+            </p>
           </div>
         </div>
       ) : (
@@ -159,7 +182,9 @@ export function WorkflowRunPanel({
                 onClick={() => setTab(key)}
                 className={cn(
                   'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm text-muted-foreground transition-colors',
-                  tab === key ? 'border-foreground font-medium text-foreground' : 'border-transparent hover:text-foreground',
+                  tab === key
+                    ? 'border-foreground font-medium text-foreground'
+                    : 'border-transparent hover:text-foreground',
                 )}
               >
                 {label}
@@ -169,7 +194,13 @@ export function WorkflowRunPanel({
           </nav>
 
           <div className="p-5">
-            {tab === 'timeline' && <TimelineView events={timeline} activeNodeId={run.path[activeIndex]} running={running} />}
+            {tab === 'timeline' && (
+              <TimelineView
+                events={timeline}
+                activeNodeId={run.path[activeIndex]}
+                running={running}
+              />
+            )}
             {tab === 'state' && <StateView transitions={transitions} />}
             {tab === 'tools' && <ToolCallsView calls={toolCalls} />}
             {tab === 'conversation' && <ConversationView turns={conversation} />}
@@ -185,7 +216,15 @@ function EmptyHint({ text }: { text: string }) {
   return <p className="py-6 text-center text-sm text-muted-foreground">{text}</p>;
 }
 
-function TimelineView({ events, activeNodeId, running }: { events: ExecutionEvent[]; activeNodeId?: string; running: boolean }) {
+function TimelineView({
+  events,
+  activeNodeId,
+  running,
+}: {
+  events: ExecutionEvent[];
+  activeNodeId?: string;
+  running: boolean;
+}) {
   if (events.length === 0) return <EmptyHint text="No events yet." />;
   return (
     <ol className="space-y-2.5">
@@ -195,8 +234,16 @@ function TimelineView({ events, activeNodeId, running }: { events: ExecutionEven
         const active = running && isNode && event.nodeId === activeNodeId;
         return (
           <li key={event.eventId} className={cn('flex gap-3 text-sm', !isNode && 'pl-4')}>
-            <span className="w-12 shrink-0 pt-0.5 text-right font-mono text-xs text-muted-foreground">{formatTime(event.t)}</span>
-            <Icon size={14} className={cn('mt-0.5 shrink-0', active ? 'text-emerald-500' : 'text-muted-foreground')} />
+            <span className="w-12 shrink-0 pt-0.5 text-right font-mono text-xs text-muted-foreground">
+              {formatTime(event.t)}
+            </span>
+            <Icon
+              size={14}
+              className={cn(
+                'mt-0.5 shrink-0',
+                active ? 'text-emerald-500' : 'text-muted-foreground',
+              )}
+            />
             <div className="min-w-0 flex-1">{renderEvent(event)}</div>
           </li>
         );
@@ -212,34 +259,44 @@ function renderEvent(event: ExecutionEvent) {
     case 'run.completed':
       return (
         <span className="font-medium">
-          Run completed{event.outcome ? <span className="text-muted-foreground"> · {event.outcome}</span> : null}
+          Run completed
+          {event.outcome ? <span className="text-muted-foreground"> · {event.outcome}</span> : null}
         </span>
       );
     case 'node.entered':
       return (
         <span>
           <span className="font-medium">{event.label}</span>
-          <span className="ml-1.5 text-xs uppercase tracking-wide text-muted-foreground">{event.kind}</span>
+          <span className="ml-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+            {event.kind}
+          </span>
         </span>
       );
     case 'tool.invoked':
       return (
         <span className="text-muted-foreground">
           Invoked <span className="font-mono text-foreground">{event.toolName}</span>
-          {Object.keys(event.inputs).length > 0 && <span className="font-mono"> ({pairs(event.inputs)})</span>}
+          {Object.keys(event.inputs).length > 0 && (
+            <span className="font-mono"> ({pairs(event.inputs)})</span>
+          )}
         </span>
       );
     case 'tool.returned':
       return (
         <span className="text-muted-foreground">
-          <span className="font-mono text-foreground">{event.toolName}</span> returned <span className="font-mono">{pairs(event.outputs) || '—'}</span>
+          <span className="font-mono text-foreground">{event.toolName}</span> returned{' '}
+          <span className="font-mono">{pairs(event.outputs) || '—'}</span>
         </span>
       );
     case 'condition.evaluated':
       return (
-        <span className={cn('font-mono text-xs', !event.result && 'text-muted-foreground line-through')}>
+        <span
+          className={cn('font-mono text-xs', !event.result && 'text-muted-foreground line-through')}
+        >
           {event.expression}
-          {event.result && event.branch ? <span className="ml-1 no-underline">→ {event.branch}</span> : null}
+          {event.result && event.branch ? (
+            <span className="ml-1 no-underline">→ {event.branch}</span>
+          ) : null}
         </span>
       );
     case 'state.changed':
@@ -248,13 +305,17 @@ function renderEvent(event: ExecutionEvent) {
           <span className="text-muted-foreground">
             {event.scope}.{event.key}:
           </span>{' '}
-          {formatValue(event.from)} → <span className="text-emerald-600 dark:text-emerald-400">{formatValue(event.to)}</span>
+          {formatValue(event.from)} →{' '}
+          <span className="text-emerald-600 dark:text-emerald-400">{formatValue(event.to)}</span>
         </span>
       );
     case 'conversation.turn':
       return (
         <span>
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">{event.speaker}</span> <span>{event.text}</span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            {event.speaker}
+          </span>{' '}
+          <span>{event.text}</span>
         </span>
       );
     case 'edge.traversed':
@@ -262,7 +323,8 @@ function renderEvent(event: ExecutionEvent) {
     case 'channel.opened':
       return (
         <span className="text-muted-foreground">
-          Channel opened <span className="font-mono text-foreground">{event.channelSessionId}</span> · {event.channel} · {event.provider}
+          Channel opened <span className="font-mono text-foreground">{event.channelSessionId}</span>{' '}
+          · {event.channel} · {event.provider}
         </span>
       );
     case 'agent.started':
@@ -274,8 +336,8 @@ function renderEvent(event: ExecutionEvent) {
     case 'agent.responded':
       return (
         <span className="text-muted-foreground">
-          Agent responded <span className="font-mono text-foreground">{event.promptVersion}</span> · {event.model} · {event.voice} ·{' '}
-          <span className="font-mono">{event.latencyMs}ms</span>
+          Agent responded <span className="font-mono text-foreground">{event.promptVersion}</span> ·{' '}
+          {event.model} · {event.voice} · <span className="font-mono">{event.latencyMs}ms</span>
         </span>
       );
     case 'knowledge.requested':
@@ -289,21 +351,28 @@ function renderEvent(event: ExecutionEvent) {
         <span className="text-muted-foreground">
           Retrieved {event.matches.length} match{event.matches.length === 1 ? '' : 'es'}
           {event.matches.length > 0 && (
-            <span className="font-mono"> ({event.matches.map((match) => `${match.source} ${match.score}`).join(', ')})</span>
+            <span className="font-mono">
+              {' '}
+              ({event.matches.map((match) => `${match.source} ${match.score}`).join(', ')})
+            </span>
           )}
         </span>
       );
     case 'runtime.completed':
       return (
         <span className="text-muted-foreground">
-          Runtime completed · {event.agentCalls} agent, {event.toolCalls} tool, {event.knowledgeQueries} knowledge ·{' '}
+          Runtime completed · {event.agentCalls} agent, {event.toolCalls} tool,{' '}
+          {event.knowledgeQueries} knowledge ·{' '}
           <span className="font-mono">{event.totalLatencyMs}ms</span>
         </span>
       );
     case 'session.opened':
       return (
         <span className="font-medium">
-          Session opened <span className="font-normal text-muted-foreground">· {event.channel} · {event.definitionVersion}</span>
+          Session opened{' '}
+          <span className="font-normal text-muted-foreground">
+            · {event.channel} · {event.definitionVersion}
+          </span>
         </span>
       );
     case 'session.ended':
@@ -323,33 +392,44 @@ function renderEvent(event: ExecutionEvent) {
     case 'turn.completed':
       return (
         <span>
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">{event.speaker}</span> <span>{event.text}</span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            {event.speaker}
+          </span>{' '}
+          <span>{event.text}</span>
         </span>
       );
     case 'turn.interrupted':
       return (
         <span className="text-amber-600 dark:text-amber-400">
-          Interrupted{event.partialText ? <span className="text-muted-foreground"> after “{event.partialText}”</span> : null}
+          Interrupted
+          {event.partialText ? (
+            <span className="text-muted-foreground"> after “{event.partialText}”</span>
+          ) : null}
         </span>
       );
     case 'intent.detected':
       return (
         <span className="text-muted-foreground">
           Intent <span className="font-mono text-foreground">{event.intent}</span>
-          {event.confidence !== undefined && <span className="font-mono"> ({event.confidence})</span>}
+          {event.confidence !== undefined && (
+            <span className="font-mono"> ({event.confidence})</span>
+          )}
         </span>
       );
     case 'consultation.started':
       return (
         <span className="text-muted-foreground">
-          Consulting workflow <span className="font-mono text-foreground">{event.stimulusKind}</span>
+          Consulting workflow{' '}
+          <span className="font-mono text-foreground">{event.stimulusKind}</span>
           {event.detail && <span className="font-mono"> · {event.detail}</span>}
         </span>
       );
     case 'consultation.paused':
       return (
         <span className="text-muted-foreground">
-          Paused at <span className="font-mono text-foreground">{event.cursorNodeId ?? 'start'}</span> · {event.reason}
+          Paused at{' '}
+          <span className="font-mono text-foreground">{event.cursorNodeId ?? 'start'}</span> ·{' '}
+          {event.reason}
         </span>
       );
     case 'consultation.completed':
@@ -357,7 +437,8 @@ function renderEvent(event: ExecutionEvent) {
     case 'directive.issued':
       return (
         <span className="text-muted-foreground">
-          Directive <span className="font-mono text-foreground">{event.directiveKind}</span> · {event.summary}
+          Directive <span className="font-mono text-foreground">{event.directiveKind}</span> ·{' '}
+          {event.summary}
         </span>
       );
     case 'directive.completed':
@@ -379,12 +460,15 @@ function StateView({ transitions }: { transitions: ReturnType<typeof projectStat
     <ul className="space-y-2">
       {transitions.map((change) => (
         <li key={`${change.seq}`} className="flex items-baseline gap-3 text-sm">
-          <span className="w-12 shrink-0 text-right font-mono text-xs text-muted-foreground">{formatTime(change.t)}</span>
+          <span className="w-12 shrink-0 text-right font-mono text-xs text-muted-foreground">
+            {formatTime(change.t)}
+          </span>
           <span className="font-mono text-xs">
             <span className="text-muted-foreground">
               {change.scope}.{change.key}
             </span>{' '}
-            {formatValue(change.from)} → <span className="text-emerald-600 dark:text-emerald-400">{formatValue(change.to)}</span>
+            {formatValue(change.from)} →{' '}
+            <span className="text-emerald-600 dark:text-emerald-400">{formatValue(change.to)}</span>
           </span>
         </li>
       ))}
@@ -409,7 +493,11 @@ function ToolCallsView({ calls }: { calls: ReturnType<typeof projectToolCalls> }
             </div>
             <div>
               <span className="text-muted-foreground">out </span>
-              {call.outputs ? pairs(call.outputs) || '—' : <span className="text-muted-foreground">pending…</span>}
+              {call.outputs ? (
+                pairs(call.outputs) || '—'
+              ) : (
+                <span className="text-muted-foreground">pending…</span>
+              )}
             </div>
           </div>
         </li>
@@ -424,15 +512,27 @@ function ConversationView({ turns }: { turns: ReturnType<typeof projectConversat
     <ul className="space-y-3">
       {turns.map((turn, index) => (
         <li key={index} className={cn('max-w-[85%]', turn.speaker === 'caller' && 'ml-auto')}>
-          <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">{turn.speaker}</p>
-          <div className={cn('rounded-lg px-3 py-2 text-sm', turn.speaker === 'caller' ? 'bg-foreground text-background' : 'bg-muted')}>{turn.text}</div>
+          <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+            {turn.speaker}
+          </p>
+          <div
+            className={cn(
+              'rounded-lg px-3 py-2 text-sm',
+              turn.speaker === 'caller' ? 'bg-foreground text-background' : 'bg-muted',
+            )}
+          >
+            {turn.text}
+          </div>
         </li>
       ))}
     </ul>
   );
 }
 
-const turnStatusVariant: Record<ReturnType<typeof projectTurns>[number]['status'], 'neutral' | 'success' | 'warning'> = {
+const turnStatusVariant: Record<
+  ReturnType<typeof projectTurns>[number]['status'],
+  'neutral' | 'success' | 'warning'
+> = {
   in_progress: 'neutral',
   completed: 'success',
   interrupted: 'warning',
@@ -447,13 +547,19 @@ function TurnsView({ turns }: { turns: ReturnType<typeof projectTurns> }) {
         <li key={turn.turnId ?? `${turn.seq}-${index}`} className="rounded-md border p-3 text-sm">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">{turn.speaker}</span>
-              <Badge variant={turnStatusVariant[turn.status]}>{turn.status.replace('_', ' ')}</Badge>
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                {turn.speaker}
+              </span>
+              <Badge variant={turnStatusVariant[turn.status]}>
+                {turn.status.replace('_', ' ')}
+              </Badge>
             </div>
             <span className="font-mono text-xs text-muted-foreground">{formatTime(turn.t)}</span>
           </div>
           <p className="mt-2">
-            {turn.status === 'interrupted' && turn.partialText ? turn.partialText : (turn.text ?? <span className="text-muted-foreground">—</span>)}
+            {turn.status === 'interrupted' && turn.partialText
+              ? turn.partialText
+              : (turn.text ?? <span className="text-muted-foreground">—</span>)}
           </p>
           {turn.status === 'interrupted' && turn.text && turn.partialText && (
             <p className="mt-1 text-xs text-muted-foreground">Full turn: “{turn.text}”</p>

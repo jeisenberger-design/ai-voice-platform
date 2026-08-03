@@ -1,2 +1,101 @@
-'use client'; import Link from 'next/link'; import { BarChart3, Copy, MoreHorizontal, Plus, Search } from 'lucide-react'; import { useState } from 'react'; import { Button, Card, Badge } from '@/components/ui'; import { PageHeader } from '@/components/page-header'; import { useAgents } from '@/hooks/use-platform-data'; import type { Agent } from '@/lib/mock-data';
-export default function Agents(){const {data=[]}=useAgents();const [overrides,setOverrides]=useState<Record<string,Agent['status']>>({});const items=data.map(agent=>({...agent,status:overrides[agent.id]??agent.status}));const toggle=(agent:Agent)=>setOverrides(current=>({...current,[agent.id]:agent.status==='Active'?'Paused':'Active'}));return <><PageHeader title="Agents" description="Configure and monitor your AI voice workforce." actions={<Link href="/agents/new"><Button><Plus size={16} className="mr-2"/>Create agent</Button></Link>}/><Card><div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between"><div className="relative"><Search className="absolute left-3 top-2.5 text-muted-foreground" size={16}/><input className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm sm:w-64" placeholder="Search agents"/></div><span className="text-sm text-muted-foreground">{items.length} agents</span></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b bg-muted/40 text-xs text-muted-foreground"><tr>{['Agent','Status','Calls','Success rate','Last updated',''].map(x=><th className="px-5 py-3 font-medium" key={x}>{x}</th>)}</tr></thead><tbody>{items.map(a=><tr className="border-b last:border-0" key={a.id}><td className="px-5 py-4"><Link href={`/agents/${a.id}`} className="font-medium hover:underline">{a.name}</Link><p className="mt-0.5 text-xs text-muted-foreground">{a.purpose}</p></td><td className="px-5 py-4"><Badge variant={a.status==='Active'?'success':'neutral'}>{a.status}</Badge></td><td className="px-5 py-4">{a.calls.toLocaleString()}</td><td className="px-5 py-4">{a.successRate ? `${a.successRate}%` : '—'}</td><td className="px-5 py-4 text-muted-foreground">{a.updated}</td><td className="px-5 py-4"><div className="flex gap-1"><Link href={`/agents/${a.id}`}><Button variant="ghost" aria-label="Edit agent">Edit</Button></Link><Button variant="ghost" aria-label="Duplicate agent"><Copy size={16}/></Button><Button variant="ghost" aria-label="View analytics"><BarChart3 size={16}/></Button><Button variant="ghost" onClick={()=>toggle(a)} aria-label="Activate or pause agent"><MoreHorizontal size={16}/></Button></div></td></tr>)}</tbody></table></div></Card></>}
+'use client';
+import Link from 'next/link';
+import { BarChart3, Copy, MoreHorizontal, Plus, Search } from 'lucide-react';
+import { useState } from 'react';
+import { Button, Card, Badge } from '@/components/ui';
+import { PageHeader } from '@/components/page-header';
+import { useAgents } from '@/hooks/use-platform-data';
+import type { Agent } from '@/lib/mock-data';
+export default function Agents() {
+  const { data = [] } = useAgents();
+  const [overrides, setOverrides] = useState<Record<string, Agent['status']>>({});
+  const items = data.map((agent) => ({ ...agent, status: overrides[agent.id] ?? agent.status }));
+  const toggle = (agent: Agent) =>
+    setOverrides((current) => ({
+      ...current,
+      [agent.id]: agent.status === 'Active' ? 'Paused' : 'Active',
+    }));
+  return (
+    <>
+      <PageHeader
+        title="Agents"
+        description="Configure and monitor your AI voice workforce."
+        actions={
+          <Link href="/agents/new">
+            <Button>
+              <Plus size={16} className="mr-2" />
+              Create agent
+            </Button>
+          </Link>
+        }
+      />
+      <Card>
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-muted-foreground" size={16} />
+            <input
+              className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm sm:w-64"
+              placeholder="Search agents"
+            />
+          </div>
+          <span className="text-sm text-muted-foreground">{items.length} agents</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
+              <tr>
+                {['Agent', 'Status', 'Calls', 'Success rate', 'Last updated', ''].map((x) => (
+                  <th className="px-5 py-3 font-medium" key={x}>
+                    {x}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((a) => (
+                <tr className="border-b last:border-0" key={a.id}>
+                  <td className="px-5 py-4">
+                    <Link href={`/agents/${a.id}`} className="font-medium hover:underline">
+                      {a.name}
+                    </Link>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{a.purpose}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <Badge variant={a.status === 'Active' ? 'success' : 'neutral'}>
+                      {a.status}
+                    </Badge>
+                  </td>
+                  <td className="px-5 py-4">{a.calls.toLocaleString()}</td>
+                  <td className="px-5 py-4">{a.successRate ? `${a.successRate}%` : '—'}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{a.updated}</td>
+                  <td className="px-5 py-4">
+                    <div className="flex gap-1">
+                      <Link href={`/agents/${a.id}`}>
+                        <Button variant="ghost" aria-label="Edit agent">
+                          Edit
+                        </Button>
+                      </Link>
+                      <Button variant="ghost" aria-label="Duplicate agent">
+                        <Copy size={16} />
+                      </Button>
+                      <Button variant="ghost" aria-label="View analytics">
+                        <BarChart3 size={16} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => toggle(a)}
+                        aria-label="Activate or pause agent"
+                      >
+                        <MoreHorizontal size={16} />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
+  );
+}

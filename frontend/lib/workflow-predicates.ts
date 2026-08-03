@@ -5,7 +5,12 @@
 // rather than replace it. Evaluation reads only the structured model, so there is no
 // `eval` and the same predicate can be handed to a real rules engine unchanged.
 
-import { formatValue, resolveOperand, type Operand, type WorkflowContext } from '@/lib/workflow-context';
+import {
+  formatValue,
+  resolveOperand,
+  type Operand,
+  type WorkflowContext,
+} from '@/lib/workflow-context';
 
 export type PredicateOperator = '==' | '!=' | '>' | '>=' | '<' | '<=' | 'exists' | 'not_exists';
 export type Predicate = { left: Operand; op: PredicateOperator; right?: Operand };
@@ -48,7 +53,10 @@ function operandWithValue(context: WorkflowContext, operand: Operand): string {
   return `${operand.ref.key}(${formatValue(resolveOperand(context, operand))})`;
 }
 
-export function describePredicateWithValues(context: WorkflowContext, predicate: Predicate): string {
+export function describePredicateWithValues(
+  context: WorkflowContext,
+  predicate: Predicate,
+): string {
   const left = operandWithValue(context, predicate.left);
   if (predicate.op === 'exists') return `${left} exists`;
   if (predicate.op === 'not_exists') return `${left} is empty`;

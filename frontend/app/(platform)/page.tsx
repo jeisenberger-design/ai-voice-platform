@@ -1,2 +1,158 @@
-import { Activity, ArrowUpRight, HeartPulse, MoreHorizontal } from 'lucide-react'; import { Badge, Card } from '@/components/ui'; import { PageHeader } from '@/components/page-header'; import { activity, agents, metrics, weeklyCalls } from '@/lib/mock-data';
-export default function Dashboard(){const points=weeklyCalls.map((v,i)=>`${i*16.5},${100-(v-500)/4}`).join(' ');return <><PageHeader title="Dashboard" description="A real-time view of your voice operations."/><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{metrics.map(m=><Card className="p-4" key={m.label}><p className="text-sm text-muted-foreground">{m.label}</p><p className="mt-3 text-2xl font-semibold">{m.value}</p><p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">{m.change} <span className="text-muted-foreground">vs. last period</span></p></Card>)}</div><div className="mt-6 grid gap-6 xl:grid-cols-3"><Card className="p-5 xl:col-span-2"><div className="flex items-start justify-between"><div><h2 className="font-medium">Call volume</h2><p className="mt-1 text-sm text-muted-foreground">Completed calls over the last 7 days</p></div><Badge>Last 7 days</Badge></div><div className="mt-8 h-52"><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible" role="img" aria-label="Call volume rose from 520 to 760 calls this week"><path d="M0 100 H100 M0 66 H100 M0 33 H100" stroke="currentColor" className="text-border" strokeWidth=".4"/><polyline points={points} fill="none" stroke="currentColor" className="text-foreground" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>{weeklyCalls.map((v,i)=><circle key={v+i} cx={i*16.5} cy={100-(v-500)/4} r="1.6" className="fill-background stroke-foreground" vectorEffect="non-scaling-stroke"/>)}</svg><div className="mt-2 flex justify-between text-xs text-muted-foreground"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div></div></Card><Card className="p-5"><div className="flex items-center gap-2"><HeartPulse size={18}/><h2 className="font-medium">System health</h2></div><div className="mt-6 space-y-5">{[['Voice infrastructure','Operational'],['Knowledge retrieval','Operational'],['Telephony providers','Operational']].map(([name,status])=><div key={name} className="flex items-center justify-between"><span className="text-sm">{name}</span><Badge variant="success"><span className="mr-1">●</span>{status}</Badge></div>)}</div><button className="mt-7 text-sm font-medium underline underline-offset-4">View status page</button></Card></div><div className="mt-6 grid gap-6 lg:grid-cols-2"><Card className="p-5"><div className="mb-4 flex justify-between"><div><h2 className="font-medium">Recent activity</h2><p className="mt-1 text-sm text-muted-foreground">Changes across your workspace</p></div><Activity size={18} className="text-muted-foreground"/></div><div className="divide-y">{activity.map(a=><div className="flex gap-3 py-3" key={a.title}><div className="mt-1 size-2 rounded-full bg-foreground"/><div className="min-w-0 flex-1"><p className="text-sm">{a.title}</p><p className="text-xs text-muted-foreground">{a.detail}</p></div><span className="text-xs text-muted-foreground">{a.time}</span></div>)}</div></Card><Card className="p-5"><div className="mb-4 flex justify-between"><div><h2 className="font-medium">Agent status</h2><p className="mt-1 text-sm text-muted-foreground">Your most active agents</p></div><button><MoreHorizontal size={18}/></button></div><div className="divide-y">{agents.slice(0,3).map(agent=><div className="flex items-center gap-3 py-3" key={agent.id}><div className="grid size-9 place-items-center rounded-full bg-muted text-sm font-medium">{agent.name[0]}</div><div className="flex-1"><p className="text-sm font-medium">{agent.name}</p><p className="text-xs text-muted-foreground">{agent.calls.toLocaleString()} calls this month</p></div><Badge variant={agent.status==='Active'?'success':'neutral'}>{agent.status}</Badge></div>)}</div><button className="mt-5 flex items-center gap-1 text-sm font-medium">View all agents <ArrowUpRight size={14}/></button></Card></div></>}
+import { Activity, ArrowUpRight, HeartPulse, MoreHorizontal } from 'lucide-react';
+import { Badge, Card } from '@/components/ui';
+import { PageHeader } from '@/components/page-header';
+import { activity, agents, metrics, weeklyCalls } from '@/lib/mock-data';
+export default function Dashboard() {
+  const points = weeklyCalls.map((v, i) => `${i * 16.5},${100 - (v - 500) / 4}`).join(' ');
+  return (
+    <>
+      <PageHeader title="Dashboard" description="A real-time view of your voice operations." />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {metrics.map((m) => (
+          <Card className="p-4" key={m.label}>
+            <p className="text-sm text-muted-foreground">{m.label}</p>
+            <p className="mt-3 text-2xl font-semibold">{m.value}</p>
+            <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+              {m.change} <span className="text-muted-foreground">vs. last period</span>
+            </p>
+          </Card>
+        ))}
+      </div>
+      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+        <Card className="p-5 xl:col-span-2">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-medium">Call volume</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Completed calls over the last 7 days
+              </p>
+            </div>
+            <Badge>Last 7 days</Badge>
+          </div>
+          <div className="mt-8 h-52">
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="h-full w-full overflow-visible"
+              role="img"
+              aria-label="Call volume rose from 520 to 760 calls this week"
+            >
+              <path
+                d="M0 100 H100 M0 66 H100 M0 33 H100"
+                stroke="currentColor"
+                className="text-border"
+                strokeWidth=".4"
+              />
+              <polyline
+                points={points}
+                fill="none"
+                stroke="currentColor"
+                className="text-foreground"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+              {weeklyCalls.map((v, i) => (
+                <circle
+                  key={v + i}
+                  cx={i * 16.5}
+                  cy={100 - (v - 500) / 4}
+                  r="1.6"
+                  className="fill-background stroke-foreground"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
+            <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+              <span>Mon</span>
+              <span>Tue</span>
+              <span>Wed</span>
+              <span>Thu</span>
+              <span>Fri</span>
+              <span>Sat</span>
+              <span>Sun</span>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <HeartPulse size={18} />
+            <h2 className="font-medium">System health</h2>
+          </div>
+          <div className="mt-6 space-y-5">
+            {[
+              ['Voice infrastructure', 'Operational'],
+              ['Knowledge retrieval', 'Operational'],
+              ['Telephony providers', 'Operational'],
+            ].map(([name, status]) => (
+              <div key={name} className="flex items-center justify-between">
+                <span className="text-sm">{name}</span>
+                <Badge variant="success">
+                  <span className="mr-1">●</span>
+                  {status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          <button className="mt-7 text-sm font-medium underline underline-offset-4">
+            View status page
+          </button>
+        </Card>
+      </div>
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Card className="p-5">
+          <div className="mb-4 flex justify-between">
+            <div>
+              <h2 className="font-medium">Recent activity</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Changes across your workspace</p>
+            </div>
+            <Activity size={18} className="text-muted-foreground" />
+          </div>
+          <div className="divide-y">
+            {activity.map((a) => (
+              <div className="flex gap-3 py-3" key={a.title}>
+                <div className="mt-1 size-2 rounded-full bg-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm">{a.title}</p>
+                  <p className="text-xs text-muted-foreground">{a.detail}</p>
+                </div>
+                <span className="text-xs text-muted-foreground">{a.time}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div className="mb-4 flex justify-between">
+            <div>
+              <h2 className="font-medium">Agent status</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Your most active agents</p>
+            </div>
+            <button>
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+          <div className="divide-y">
+            {agents.slice(0, 3).map((agent) => (
+              <div className="flex items-center gap-3 py-3" key={agent.id}>
+                <div className="grid size-9 place-items-center rounded-full bg-muted text-sm font-medium">
+                  {agent.name[0]}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{agent.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {agent.calls.toLocaleString()} calls this month
+                  </p>
+                </div>
+                <Badge variant={agent.status === 'Active' ? 'success' : 'neutral'}>
+                  {agent.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          <button className="mt-5 flex items-center gap-1 text-sm font-medium">
+            View all agents <ArrowUpRight size={14} />
+          </button>
+        </Card>
+      </div>
+    </>
+  );
+}
