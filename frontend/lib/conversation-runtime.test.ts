@@ -624,3 +624,253 @@ describe('Runtime provenance and version pinning (Phase 2)', () => {
     expect(responded?.text).not.toContain('Unpublished draft edit.');
   });
 });
+
+// Provenance audit follow-up: single-agent EventIdentity defaults (agentId/
+// agentVersionId) are a convenience view, not the source of truth — they're absent for
+// multi-agent runs by design (see EventIdentity's doc comment in workflow-events.ts).
+// These tests confirm the *complete* agentId -> agentVersionId binding survives on the
+// canonical stream regardless: durable on run.started's own payload, reconstructable
+// without ever consulting AgentRepository, and correct per node even when nodes for
+// different agents interleave or a branch goes entirely unvisited.
+describe('Multi-agent runtime provenance (Phase 2 follow-up)', () => {
+  let agentRepository: AgentRepository;
+
+  beforeEach(() => {
+    agentRepository = freshAgentRepository();
+  });
+
+  /** trigger -> agent(agent1Id) -> agent(agent2Id) -> end — both agents invoked. */
+  function twoAgentSequentialWorkflow(agent1Id: string, agent2Id: string): Workflow {
+    return workflow({
+      nodes: [
+        node('n1', 'trigger', 'Start'),
+        node('n2', 'agent', 'First agent', { ref: { type: 'agent', id: agent1Id } }),
+        node('n3', 'agent', 'Second agent', { ref: { type: 'agent', id: agent2Id } }),
+        node('n4', 'end', 'Done'),
+      ],
+      edges: [
+        { id: 'e1', source: 'n1', target: 'n2' },
+        { id: 'e2', source: 'n2', target: 'n3' },
+        { id: 'e3', source: 'n3', target: 'n4' },
+      ],
+    });
+  }
+
+  /**
+   * trigger -> decision -> [agent(agent1Id) | agent(agent2Id)] -> end. Neither edge out
+   * of the decision node carries a condition, so the `decision` executor's fallback
+   * (`outgoing.find(edge => !edge.condition)`) deterministically always takes the
+   * first-declared edge — to n3/agent1. n4/agent2 is a real reference in the workflow
+   * definition that this particular run never visits.
+   */
+  function branchingTwoAgentWorkflow(agent1Id: string, agent2Id: string): Workflow {
+    return workflow({
+      nodes: [
+        node('n1', 'trigger', 'Start'),
+        node('n2', 'decision', 'Pick a branch'),
+        node('n3', 'agent', 'Branch A agent', { ref: { type: 'agent', id: agent1Id } }),
+        node('n4', 'agent', 'Branch B agent (never visited)', {
+          ref: { type: 'agent', id: agent2Id },
+        }),
+        node('n5', 'end', 'Done'),
+      ],
+      edges: [
+        { id: 'e1', source: 'n1', target: 'n2' },
+        { id: 'e2', source: 'n2', target: 'n3' },
+        { id: 'e3', source: 'n2', target: 'n4' },
+        { id: 'e4', source: 'n3', target: 'n5' },
+        { id: 'e5', source: 'n4', target: 'n5' },
+      ],
+    });
+  }
+
+  it('captures the complete agentId -> agentVersionId binding for a two-agent workflow on run.started', async () => {
+    const agent1Id = await seedPublishedAgent(agentRepository, {}, 'Agent One');
+    const agent2Id = await seedPublishedAgent(agentRepository, {}, 'Agent Two');
+    const v1 = await agentRepository.getPublishedVersion(agent1Id);
+    const v2 = await agentRepository.getPublishedVersion(agent2Id);
+    const wf = twoAgentSequentialWorkflow(agent1Id, agent2Id);
+    const { recorder } = newRecorder();
+
+    await runConversationSession({
+      workflow: wf,
+      runtime: createMockRuntime({ agentRepository }),
+      recorder,
+      runId: nextRunId(),
+      stimulusSource: fixedTurnSource(),
+      agentRepository,
+    });
+
+    const started = recorder.list().find((event) => event.type === 'run.started') as
+      Extract<ExecutionEvent, { type: 'run.started' }> | undefined;
+    expect(started?.agentVersions).toEqual({
+      [agent1Id]: v1?.versionId,
+      [agent2Id]: v2?.versionId,
+    });
+    // The single-agent convenience default must NOT be the only representation — for a
+    // two-agent run it's correctly absent, while the complete binding above is present.
+    expect(started?.agentId).toBeUndefined();
+    expect(started?.agentVersionId).toBeUndefined();
+  });
+
+  it("gives every agent-specific event the exact agentId/agentVersionId it actually used, never the other agent's", async () => {
+    const agent1Id = await seedPublishedAgent(agentRepository, {}, 'Agent One');
+    const agent2Id = await seedPublishedAgent(agentRepository, {}, 'Agent Two');
+    const v1 = await agentRepository.getPublishedVersion(agent1Id);
+    const v2 = await agentRepository.getPublishedVersion(agent2Id);
+    const wf = twoAgentSequentialWorkflow(agent1Id, agent2Id);
+    const { recorder } = newRecorder();
+
+    await runConversationSession({
+      workflow: wf,
+      runtime: createMockRuntime({ agentRepository }),
+      recorder,
+      runId: nextRunId(),
+      stimulusSource: fixedTurnSource(),
+      agentRepository,
+    });
+
+    const startedEvents = recorder
+      .list()
+      .filter((event) => event.type === 'agent.started') as Extract<
+      ExecutionEvent,
+      { type: 'agent.started' }
+    >[];
+    const respondedEvents = recorder
+      .list()
+      .filter((event) => event.type === 'agent.responded') as Extract<
+      ExecutionEvent,
+      { type: 'agent.responded' }
+    >[];
+
+    expect(startedEvents).toHaveLength(2);
+    expect(startedEvents[0]).toMatchObject({ agentId: agent1Id, agentVersionId: v1?.versionId });
+    expect(startedEvents[1]).toMatchObject({ agentId: agent2Id, agentVersionId: v2?.versionId });
+
+    expect(respondedEvents).toHaveLength(2);
+    expect(respondedEvents[0]).toMatchObject({ agentId: agent1Id, agentVersionId: v1?.versionId });
+    expect(respondedEvents[1]).toMatchObject({ agentId: agent2Id, agentVersionId: v2?.versionId });
+  });
+
+  it('keeps both agents pinned to their session-start versions even after publishing newer versions of both mid-session', async () => {
+    const agent1Id = await seedPublishedAgent(agentRepository, {}, 'Agent One');
+    const agent2Id = await seedPublishedAgent(agentRepository, {}, 'Agent Two');
+    const pinned1 = await agentRepository.getPublishedVersion(agent1Id);
+    const pinned2 = await agentRepository.getPublishedVersion(agent2Id);
+    const wf = twoAgentSequentialWorkflow(agent1Id, agent2Id);
+
+    let republished = false;
+    const publishBothMidwaySource: StimulusSource = {
+      peekInterrupts: () => false,
+      nextCallerTurn: async () => {
+        if (!republished) {
+          republished = true;
+          await agentRepository.updateDraft(agent1Id, { voice: 'Changed after pin' });
+          await agentRepository.publish(agent1Id);
+          await agentRepository.updateDraft(agent2Id, { voice: 'Changed after pin' });
+          await agentRepository.publish(agent2Id);
+        }
+        return { kind: 'turn', turn: { text: 'continue' } };
+      },
+    };
+
+    const { recorder } = newRecorder();
+    await runConversationSession({
+      workflow: wf,
+      runtime: createMockRuntime({ agentRepository }),
+      recorder,
+      runId: nextRunId(),
+      stimulusSource: publishBothMidwaySource,
+      agentRepository,
+    });
+
+    expect(republished).toBe(true);
+    const latest1 = await agentRepository.getPublishedVersion(agent1Id);
+    const latest2 = await agentRepository.getPublishedVersion(agent2Id);
+    expect(latest1?.versionId).not.toBe(pinned1?.versionId);
+    expect(latest2?.versionId).not.toBe(pinned2?.versionId);
+
+    // agent1's node runs before the republish; agent2's runs after — both must still
+    // reflect the versions resolved at session start, not the newer ones.
+    const responded = recorder
+      .list()
+      .filter((event) => event.type === 'agent.responded') as Extract<
+      ExecutionEvent,
+      { type: 'agent.responded' }
+    >[];
+    expect(responded).toHaveLength(2);
+    expect(responded[0].agentVersionId).toBe(pinned1?.versionId);
+    expect(responded[1].agentVersionId).toBe(pinned2?.versionId);
+
+    const started = recorder.list().find((event) => event.type === 'run.started') as
+      Extract<ExecutionEvent, { type: 'run.started' }> | undefined;
+    expect(started?.agentVersions).toEqual({
+      [agent1Id]: pinned1?.versionId,
+      [agent2Id]: pinned2?.versionId,
+    });
+  });
+
+  it('reconstructs complete multi-agent provenance from the event stream alone, including an agent whose branch was never visited', async () => {
+    const agent1Id = await seedPublishedAgent(agentRepository, {}, 'Branch A Agent');
+    const agent2Id = await seedPublishedAgent(agentRepository, {}, 'Branch B Agent');
+    const v1 = await agentRepository.getPublishedVersion(agent1Id);
+    const v2 = await agentRepository.getPublishedVersion(agent2Id);
+    const wf = branchingTwoAgentWorkflow(agent1Id, agent2Id);
+    const { recorder } = newRecorder();
+
+    await runConversationSession({
+      workflow: wf,
+      runtime: createMockRuntime({ agentRepository }),
+      recorder,
+      runId: nextRunId(),
+      stimulusSource: fixedTurnSource(),
+      agentRepository,
+    });
+
+    const events = recorder.list();
+    // Only agent1's branch actually ran — reading agent.started/agent.responded alone
+    // would miss agent2 entirely.
+    const agentIdsSeenPerNode = new Set(
+      events
+        .filter((event) => event.type === 'agent.started')
+        .map((event) => (event as Extract<ExecutionEvent, { type: 'agent.started' }>).agentId),
+    );
+    expect(agentIdsSeenPerNode).toEqual(new Set([agent1Id]));
+
+    // But run.started's complete binding — reconstructed from the event stream alone,
+    // no repository call — still names both agents and their pinned versions.
+    const started = events.find((event) => event.type === 'run.started') as
+      Extract<ExecutionEvent, { type: 'run.started' }> | undefined;
+    expect(started?.agentVersions).toEqual({
+      [agent1Id]: v1?.versionId,
+      [agent2Id]: v2?.versionId,
+    });
+  });
+
+  it("MockAgentRuntime resolves only the exact pinned version id it's given — never a fresh 'latest published' lookup", async () => {
+    // If MockAgentRuntime ever called getPublishedVersion(agentId) internally instead
+    // of resolving the exact agentVersionId it was handed, this repository would answer
+    // with the newer version below and the assertions in the mid-session pinning tests
+    // above would fail. This test names that invariant directly, at the contract level,
+    // rather than only inferring it from timing-sensitive scenarios.
+    const agentId = await seedPublishedAgent(agentRepository, {
+      instructions: { Identity: 'Old identity.' },
+    });
+    const pinned = await agentRepository.getPublishedVersion(agentId);
+    await agentRepository.updateDraft(agentId, { instructions: { Identity: 'New identity.' } });
+    await agentRepository.publish(agentId);
+
+    const runtime = createMockRuntime({ agentRepository });
+    const result = await runtime.agent.respond({
+      agentId,
+      agentVersionId: pinned!.versionId,
+      instruction: 'test instruction',
+      context: createInitialContext([]),
+      meta: { runId: 'run_test' },
+    });
+
+    expect(result.agentVersionId).toBe(pinned?.versionId);
+    expect(result.text).toContain('Old identity.');
+    expect(result.text).not.toContain('New identity.');
+  });
+});

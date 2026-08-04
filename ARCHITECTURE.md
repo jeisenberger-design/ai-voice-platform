@@ -281,12 +281,24 @@ pinned: `ExecutionRecorder.setProvenance` stamps every subsequent event's
 `workflowId`/`workflowVersion` (always) and `agentId`/`agentVersionId` (when the
 workflow references exactly one distinct agent) onto `EventIdentity`, and throws if
 called after the first event — publishing a new version mid-session can never
-retroactively change what's already on the stream. `agent.started`/`agent.responded`
-additionally carry their own per-node `agentId`/`agentVersionId` on the event payload,
-so a (currently hypothetical) multi-agent workflow still gets correct per-node
-provenance even without a single run-level default. `Agent`'s ten legacy fixture fields
-(`lib/mock-data.ts`) are **not** what `AgentRuntime` resolves through anymore; that
-fixture remains read by UI screens only, not yet migrated (Phase 3).
+retroactively change what's already on the stream. `EventIdentity.agentId`/
+`agentVersionId` are a **single-agent convenience view only** — present solely when the
+workflow references exactly one distinct agent — not the source of truth for
+provenance in general: the complete, canonical record is `run.started`'s own
+`agentVersions: Record<string, string>` payload field, the full agentId → pinned
+`AgentVersion` id binding for every agent the workflow's nodes reference, captured
+once at session start regardless of which nodes a given run actually visits (an
+untaken decision branch's agent is still bound there even though it never produces its
+own `agent.started`/`agent.responded`). `agent.started`/`agent.responded` additionally
+carry their own per-node `agentId`/`agentVersionId` on the event payload, so a
+multi-agent workflow gets correct per-node provenance too — but reconstructing "what
+did this run pin for every agent it could have used" requires `run.started.agentVersions`,
+not just those per-node events, precisely because a node that's never visited never
+emits one. A projection can recover this from the event stream alone, without
+consulting `AgentRepository` (mutable, forward-moving) or the live draft. `Agent`'s ten
+legacy fixture fields (`lib/mock-data.ts`) are **not** what `AgentRuntime` resolves
+through anymore; that fixture remains read by UI screens only, not yet migrated
+(Phase 3).
 
 ## Presentation
 
@@ -406,9 +418,14 @@ and what's not built yet.
   reads the Phase 1 repository. `runConversationSession` resolves and pins one
   published `AgentVersion` per agent the workflow references, once, before a session
   starts; `MockAgentRuntime` resolves through it (see "Runtime Interfaces" above); every
-  event on the run carries immutable `workflowId`/`workflowVersion`/`agentId`/
-  `agentVersionId` provenance, unaffected by a version published mid-session. UI screens
-  still read the old `mock-data.ts` fixture for display — that's Phase 3.
+  event on the run carries immutable `workflowId`/`workflowVersion` provenance and,
+  where applicable, `agentId`/`agentVersionId`, unaffected by a version published
+  mid-session. A follow-up audit found that representation alone was insufficient for
+  multi-agent workflows (a run's complete agent→version binding wasn't durably
+  recoverable from the event stream) — closed by adding `run.started.agentVersions`,
+  the complete binding, always present regardless of which nodes a run visits (see
+  "Runtime Interfaces" above). UI screens still read the old `mock-data.ts` fixture for
+  display — that's Phase 3.
 
 ## Known architectural debt
 

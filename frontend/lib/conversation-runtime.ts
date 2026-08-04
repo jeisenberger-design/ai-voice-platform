@@ -436,6 +436,10 @@ export async function runConversationSession(input: {
       session: { ...initial.session },
       metadata: { ...initial.metadata },
     },
+    // The complete agentId -> pinned AgentVersion id binding, durable on the canonical
+    // stream regardless of which nodes this run actually visits — see run.started's
+    // payload doc comment in workflow-events.ts.
+    agentVersions: pinnedAgentVersions,
   });
 
   const conversationRuntime = new MockConversationRuntime(

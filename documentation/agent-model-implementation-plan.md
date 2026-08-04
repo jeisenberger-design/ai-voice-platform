@@ -20,12 +20,22 @@ Builder/Prompt Studio/Tools/Knowledge/Calls migration, no backend/auth/telephony
 - `lib/workflow-events.ts` — `EventIdentity` gains `workflowId`/`workflowVersion`
   (always present) and `agentId`/`agentVersionId` (present only when the workflow
   references exactly one distinct agent — see §11 risk 4). New exported `RunProvenance`
-  type. `ExecutionRecorder` gains `setProvenance(provenance)`, callable only before the
-  first `emit()` (throws otherwise), stamped onto every subsequent event. `agent.started`/
-  `agent.responded` payloads gain their own `agentVersionId` (`'unknown'` sentinel when
-  unresolved — the same treatment `promptVersion`/`model`/`voice` already used), so a
-  hypothetical multi-agent workflow still gets correct per-node provenance even when the
-  run-level default is absent.
+  type, documented explicitly as a **single-agent convenience view, not the source of
+  truth** for multi-agent runs. `ExecutionRecorder` gains `setProvenance(provenance)`,
+  callable only before the first `emit()` (throws otherwise), stamped onto every
+  subsequent event. `agent.started`/`agent.responded` payloads gain their own
+  `agentVersionId` (`'unknown'` sentinel when unresolved — the same treatment
+  `promptVersion`/`model`/`voice` already used), giving correct per-node provenance for
+  any agent actually invoked. **`run.started`'s payload gains `agentVersions: Record<
+  string, string>`** — the complete agentId → pinned `AgentVersion` id binding for
+  *every* agent the workflow's nodes reference, regardless of which nodes a given run
+  actually visits. This landed one day after the rest of Phase 2, from a dedicated
+  provenance audit (see below): the per-node events and the single-agent
+  `EventIdentity` default together were *not* sufficient to reconstruct a multi-agent
+  run's complete binding purely from the event stream — an agent referenced only by an
+  untaken decision branch would never appear anywhere on the stream. `run.started`
+  closes that gap; it is the canonical record, and everything else is a convenience
+  view over the same resolution.
 - `lib/runtime/contracts.ts` — `AgentRequest` gains `agentVersionId: string`;
   `AgentResult` gains `agentVersionId: string` (echoed back from whatever resolved).
 - `lib/runtime/mock-runtime.ts` — `MockAgentRuntime` takes an injected `AgentRepository`
@@ -449,15 +459,26 @@ simple grep-based test) asserting no file imports `Agent`/`agents` from
 3. **Knowledge source ids don't exist yet.** Minting them (`lib/mock-data.ts`'s
    `sources`) is a small, additive, low-risk change, but it's technically outside
    "the Agent model" narrowly read — flagging so it isn't a surprise scope addition.
-4. **Multi-agent workflow runs' provenance is ambiguous. Resolved exactly as
-   recommended, in Phase 2.** `EventIdentity.agentId`/`agentVersionId` are populated
-   per-event (on `agent.started`/`agent.responded`'s own payload fields) and
-   additionally set at the run level (`ExecutionRecorder.setProvenance`, called from
-   `runConversationSession`) only when `collectAgentIds` finds exactly one distinct
-   agent across the workflow's nodes — otherwise left undefined at that level. No
-   current fixture workflow is multi-agent, so this path is exercised by construction
-   (every real session today is single-agent) but not by a dedicated multi-agent test —
-   flagging that as the one piece of this recommendation not directly covered.
+4. **Multi-agent workflow runs' provenance is ambiguous. Resolved in Phase 2, corrected
+   one day later by a dedicated provenance audit.** The first pass populated
+   `EventIdentity.agentId`/`agentVersionId` per-event (on `agent.started`/
+   `agent.responded`'s own payload fields) and additionally at the run level
+   (`ExecutionRecorder.setProvenance`) only when `collectAgentIds` found exactly one
+   distinct agent — otherwise left undefined at that level, exactly as originally
+   recommended. **What that pass missed**: for a genuinely multi-agent workflow, the
+   *complete* agentId → agentVersionId binding (every agent the definition references,
+   not just the ones a given run's node walk happens to invoke) was never durably
+   recorded anywhere on the canonical event stream — only held in the
+   `pinnedAgentVersions` closure inside `runConversationSession`, invisible to any
+   projection reading events after the fact. An agent referenced only by an untaken
+   decision branch would leave no trace. Closed by adding `run.started.agentVersions`
+   (see `lib/workflow-events.ts`'s note above) — the complete binding, captured once at
+   session start, present on the stream regardless of which branch executes. 5 new
+   tests in `lib/conversation-runtime.test.ts`'s "Multi-agent runtime provenance"
+   describe block now cover exactly this: a two-agent sequential workflow, a branching
+   workflow where one agent's node is never visited, per-node correctness, mid-session
+   republish-of-both-agents pinning, and a direct assertion that `MockAgentRuntime`
+   resolves only the exact id it's given, never a fresh "latest published" lookup.
 5. **`AgentRequest` is a "stable" contract. Done, in Phase 2** — `agentVersionId:
    string` added to both `AgentRequest` and `AgentResult`. Confirmed additive: no
    interface's shape or async nature changed, only a new required field on the request/

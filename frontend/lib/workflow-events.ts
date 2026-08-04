@@ -108,7 +108,14 @@ export type EventIdentity = {
   agentVersionId?: string;
 };
 
-/** What `ExecutionRecorder.setProvenance` pins for the run — see `EventIdentity` above. */
+/**
+ * What `ExecutionRecorder.setProvenance` pins for the run — see `EventIdentity` above.
+ * `agentId`/`agentVersionId` here are a **single-agent convenience view**, present only
+ * when the workflow references exactly one distinct agent — they are deliberately not
+ * the source of truth for multi-agent runs. `run.started`'s `agentVersions` (below) is
+ * the complete, run-level record; this type is not itself sufficient to reconstruct a
+ * multi-agent run's provenance.
+ */
 export type RunProvenance = {
   workflowId: string;
   workflowVersion: number;
@@ -117,7 +124,25 @@ export type RunProvenance = {
 };
 
 export type ExecutionEventPayload =
-  | { type: 'run.started'; workflowId: string; initial: ContextSnapshot }
+  | {
+      type: 'run.started';
+      workflowId: string;
+      initial: ContextSnapshot;
+      /**
+       * The complete, immutable agentId -> pinned AgentVersion id binding for every
+       * agent this workflow's nodes reference — resolved once at session start (see
+       * runConversationSession), regardless of which nodes this particular run
+       * actually visits (an untaken decision branch's agent is still bound here even
+       * though it never produces its own agent.started/agent.responded). This is the
+       * canonical, event-stream-durable record of Phase 2 runtime provenance:
+       * EventIdentity.agentId/agentVersionId and agent.started/agent.responded's own
+       * per-node fields are convenience views over this same resolution, not
+       * alternate sources of truth — a projection reconstructing what a past run
+       * used never needs to consult AgentRepository (mutable, forward-moving) or the
+       * live draft.
+       */
+      agentVersions: Record<string, string>;
+    }
   | { type: 'run.completed'; outcome?: string }
   | { type: 'node.entered'; kind: WorkflowNodeKind; label: string }
   | { type: 'node.exited'; kind: WorkflowNodeKind; label: string }
