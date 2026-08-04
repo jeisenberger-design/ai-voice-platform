@@ -4,27 +4,44 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AgentTestingPanel } from '@/components/agent-testing-panel';
 import { type BuilderSection, useAgentBuilderStore } from '@/stores/agent-builder-store';
-const editableSections = new Set<BuilderSection>([
+import type { InstructionSection } from '@/lib/agent-model';
+
+// Phase 3A migrated exactly these 7 sections to the canonical Agent draft (see
+// documentation/agent-model-implementation-plan.md Phase 3A) — identity, personality,
+// conversation rules, transfers, memory, guardrails, output schema. Knowledge and
+// Tools stay on the legacy Zustand store deliberately: those names overlap with the
+// separately-scoped knowledge-source-selection and enabled-tools capability work
+// (Agent.knowledgeSourceIds/toolIds), not yet migrated. See agent-builder-store.ts's
+// header comment for this compatibility adapter's exact removal condition.
+const MIGRATED_SECTIONS = new Set<InstructionSection>([
   'Identity',
-  'Description',
-  'Purpose',
   'Personality',
-  'Language',
-  'Behavior Rules',
   'Conversation Rules',
-  'Knowledge',
-  'Tools',
   'Transfers',
   'Memory',
   'Guardrails',
-  'Output Format',
   'Output Schema',
 ]);
-export function StructuredEditor({ sections, agentId }: { sections: string[]; agentId: string }) {
+const LEGACY_SECTIONS = new Set<BuilderSection>(['Knowledge', 'Tools']);
+
+export function StructuredEditor({
+  sections,
+  agentId,
+  instructions,
+  onChangeSection,
+}: {
+  sections: string[];
+  agentId: string;
+  /** The canonical draft's instructions, merged with any unsaved staged edits. */
+  instructions: Record<InstructionSection, string>;
+  onChangeSection: (section: InstructionSection, value: string) => void;
+}) {
   const [active, setActive] = useState(sections[0]);
-  const config = useAgentBuilderStore(agentId, (state) => state.config);
-  const updateSection = useAgentBuilderStore(agentId, (state) => state.updateSection);
-  const updateSetting = useAgentBuilderStore(agentId, (state) => state.updateSetting);
+  // Legacy store — still authoritative for Knowledge/Tools (and the dead Voice
+  // Settings branch below, unreachable via any tab this component is ever given).
+  const legacyConfig = useAgentBuilderStore(agentId, (state) => state.config);
+  const legacyUpdateSection = useAgentBuilderStore(agentId, (state) => state.updateSection);
+  const legacyUpdateSetting = useAgentBuilderStore(agentId, (state) => state.updateSetting);
   return (
     <div className="grid gap-6 lg:grid-cols-[210px_1fr]">
       <nav className="flex gap-1 overflow-x-auto lg:block lg:space-y-1">
@@ -61,8 +78,8 @@ export function StructuredEditor({ sections, agentId }: { sections: string[]; ag
               <>
                 <Field label="Voice">
                   <select
-                    value={config.voice}
-                    onChange={(event) => updateSetting('voice', event.target.value)}
+                    value={legacyConfig.voice}
+                    onChange={(event) => legacyUpdateSetting('voice', event.target.value)}
                     className="input"
                   >
                     <option>Nova - Clear and warm</option>
@@ -73,8 +90,8 @@ export function StructuredEditor({ sections, agentId }: { sections: string[]; ag
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Speaking pace">
                     <select
-                      value={config.pace}
-                      onChange={(event) => updateSetting('pace', event.target.value)}
+                      value={legacyConfig.pace}
+                      onChange={(event) => legacyUpdateSetting('pace', event.target.value)}
                       className="input"
                     >
                       <option>Natural</option>
@@ -84,9 +101,9 @@ export function StructuredEditor({ sections, agentId }: { sections: string[]; ag
                   </Field>
                   <Field label="Interruption sensitivity">
                     <select
-                      value={config.interruptionSensitivity}
+                      value={legacyConfig.interruptionSensitivity}
                       onChange={(event) =>
-                        updateSetting('interruptionSensitivity', event.target.value)
+                        legacyUpdateSetting('interruptionSensitivity', event.target.value)
                       }
                       className="input"
                     >
@@ -97,13 +114,32 @@ export function StructuredEditor({ sections, agentId }: { sections: string[]; ag
                   </Field>
                 </div>
               </>
-            ) : editableSections.has(active as BuilderSection) ? (
+            ) : MIGRATED_SECTIONS.has(active as InstructionSection) ? (
               <>
                 <Field label={`${active} policy`}>
                   <textarea
-                    value={config.sections[active as BuilderSection] ?? ''}
+                    value={instructions[active as InstructionSection] ?? ''}
                     onChange={(event) =>
-                      updateSection(active as BuilderSection, event.target.value)
+                      onChangeSection(active as InstructionSection, event.target.value)
+                    }
+                    className="input min-h-32 resize-y"
+                  />
+                </Field>
+                <Field label="Operating guidance">
+                  <input
+                    className="input"
+                    value="Use concise, helpful language and confirm important details."
+                    readOnly
+                  />
+                </Field>
+              </>
+            ) : LEGACY_SECTIONS.has(active as BuilderSection) ? (
+              <>
+                <Field label={`${active} policy`}>
+                  <textarea
+                    value={legacyConfig.sections[active as BuilderSection] ?? ''}
+                    onChange={(event) =>
+                      legacyUpdateSection(active as BuilderSection, event.target.value)
                     }
                     className="input min-h-32 resize-y"
                   />

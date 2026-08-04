@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   ArrowLeft,
@@ -23,9 +23,8 @@ import { AgentPromptStudio } from '@/components/agent-prompt-studio';
 import { AgentTestingPanel } from '@/components/agent-testing-panel';
 import { StructuredEditor } from '@/components/structured-editor';
 import { validateAgentConfig } from '@/lib/agent-validation';
-import { useAgentBuilderStore } from '@/stores/agent-builder-store';
-import { useAgents } from '@/hooks/use-platform-data';
-import type { Agent } from '@/lib/mock-data';
+import { useAgent, useAgentDraft, useUpdateAgentDraft } from '@/hooks/use-agent-data';
+import type { Agent, InstructionSection } from '@/lib/agent-model';
 import { cn } from '@/lib/utils';
 
 const tabs = [
@@ -57,13 +56,34 @@ const statusVariant: Record<Agent['status'], 'success' | 'neutral' | 'warning'> 
 
 export function AgentDetailWorkspace({ agentId }: { agentId: string }) {
   const [tab, setTab] = useState<(typeof tabs)[number][0]>('Overview');
-  const { data: agents, isLoading } = useAgents();
-  const agent = agents?.find((item) => item.id === agentId);
-  const hasUnsavedChanges = useAgentBuilderStore(agentId, (state) => state.hasUnsavedChanges());
-  const config = useAgentBuilderStore(agentId, (state) => state.config);
-  const save = useAgentBuilderStore(agentId, (state) => state.save);
-  const discard = useAgentBuilderStore(agentId, (state) => state.discard);
-  const hasErrors = validateAgentConfig(config).some((item) => item.severity === 'error');
+  const { data: agent, isLoading: agentLoading } = useAgent(agentId);
+  const { data: draft } = useAgentDraft(agentId, !agentLoading && !!agent);
+  const updateDraft = useUpdateAgentDraft(agentId);
+
+  // Explicit-save staging: edits accumulate here, untouched in the canonical
+  // repository, until "Save changes" is clicked — see the Phase 3A save-behavior
+  // decision in documentation/agent-model-implementation-plan.md. Plain component
+  // state, not Zustand+localStorage, so "unsaved" now genuinely means not yet written
+  // anywhere — it disappears on navigation/reload exactly like the beforeunload guard
+  // below already warns the user it will.
+  const [staged, setStaged] = useState<Partial<Record<InstructionSection, string>>>({});
+  const hasUnsavedChanges = Object.keys(staged).length > 0;
+  const mergedInstructions = useMemo(
+    () => (draft ? { ...draft.instructions, ...staged } : undefined),
+    [draft, staged],
+  );
+  const hasErrors = mergedInstructions
+    ? validateAgentConfig(mergedInstructions).some((item) => item.severity === 'error')
+    : false;
+  const setSectionValue = (section: InstructionSection, value: string) =>
+    setStaged((current) => ({ ...current, [section]: value }));
+  const save = async () => {
+    if (!hasUnsavedChanges) return;
+    await updateDraft.mutateAsync({ instructions: staged });
+    setStaged({});
+  };
+  const discard = () => setStaged({});
+
   useEffect(() => {
     if (!hasUnsavedChanges) return;
     const protect = (event: BeforeUnloadEvent) => {
@@ -82,7 +102,7 @@ export function AgentDetailWorkspace({ agentId }: { agentId: string }) {
       window.location.assign('/agents');
     }
   };
-  if (isLoading)
+  if (agentLoading)
     return (
       <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">
         Loading agent…
@@ -127,7 +147,7 @@ export function AgentDetailWorkspace({ agentId }: { agentId: string }) {
                 <Badge variant={statusVariant[agent.status]}>{agent.status}</Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                {agent.purpose} · {agent.voice} voice
+                {draft?.voice ? `${draft.voice} voice` : 'Voice not configured yet'}
               </p>
             </div>
           </div>
@@ -170,10 +190,15 @@ export function AgentDetailWorkspace({ agentId }: { agentId: string }) {
         </nav>
       </header>
       {tab === 'Overview' && <Overview agent={agent} onConfigure={() => setTab('Configuration')} />}{' '}
-      {tab === 'Configuration' && (
+      {tab === 'Configuration' && mergedInstructions && (
         <>
-          <AgentValidationSummary agentId={agentId} />
-          <StructuredEditor sections={configSections} agentId={agentId} />
+          <AgentValidationSummary instructions={mergedInstructions} />
+          <StructuredEditor
+            sections={configSections}
+            agentId={agentId}
+            instructions={mergedInstructions}
+            onChangeSection={setSectionValue}
+          />
         </>
       )}{' '}
       {tab === 'Prompt Studio' && <AgentPromptStudio />} {tab === 'Knowledge' && <KnowledgePanel />}{' '}
@@ -207,10 +232,13 @@ function Overview({ agent, onConfigure }: { agent: Agent; onConfigure: () => voi
             </Badge>
           </div>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            {/* Calls/success-rate/duration have no canonical home yet — the future
+                Calls/Analytics projection (see ARCHITECTURE.md's roadmap), not
+                something Phase 3A invents. */}
             {[
-              [agent.calls.toLocaleString(), 'Calls this month'],
-              [agent.successRate ? `${agent.successRate}%` : '—', 'Success rate'],
-              ['4m 18s', 'Avg. duration'],
+              ['—', 'Calls this month'],
+              ['—', 'Success rate'],
+              ['—', 'Avg. duration'],
             ].map(([value, label]) => (
               <div key={label}>
                 <p className="text-2xl font-semibold">{value}</p>

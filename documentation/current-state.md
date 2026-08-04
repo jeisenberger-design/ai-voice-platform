@@ -16,10 +16,7 @@ against typed fixtures and a mock runtime.
   responsive layout. Routes: dashboard, agents (list / detail / new), prompt studio,
   knowledge, tools (list / detail), workflows (list / detail), analytics, calls
   (list / detail), plus placeholder sections.
-- **Agents** — screens (list, detail, prompt studio, structured editor, validation)
-  still display from the legacy `promptVersion` + `model` fixture (`mock-data.ts`) —
-  that's still Phase 3, not done. The **execution path is no longer one of those
-  screens**, though: `agent-model-design.md` §9 records the approved Agent Versioning
+- **Agents** — `agent-model-design.md` §9 records the approved Agent Versioning
   decision (a stable Agent owning one editable draft plus immutable published
   versions), Phase 1 of its implementation plan built the repository
   (`lib/agent-model.ts`, `lib/agent-repository.ts`, `lib/agent-migration.ts`), and
@@ -29,9 +26,27 @@ against typed fixtures and a mock runtime.
   every event on the run carries immutable `workflowId`/`workflowVersion`/`agentId`/
   `agentVersionId` provenance unaffected by a version published mid-session. The
   testing panel drives a real test consultation through the Conversation Runtime (see
-  below) rather than a local fake chat — and, as an unplanned side effect of Phase 2
-  touching the shared runtime it already calls, that consultation is now also
-  provenance-pinned, even though the panel's own display still reads the old fixture.
+  below) rather than a local fake chat.
+  **Phase 3A wired the first UI screens onto the same repository** (not the whole
+  Agent configuration path — see below): agent listing (`/agents`), detail loading
+  (`/agents/[id]`), and creation (`/agents/new`) all resolve by stable `agentId`
+  through one shared repository instance (`hooks/use-agent-data.ts`); creating an
+  agent produces a canonical `Agent` + empty draft, never auto-published, and the new
+  agent is immediately visible in listing and detail. Of the Agent Builder's
+  Configuration tab, 7 of 9 sections — identity, personality, conversation rules,
+  transfers, memory, guardrails, output schema — now read/write that canonical draft
+  through an explicit Save/Discard flow (edits stage locally; "Save changes" commits
+  the whole patch in one call; a published version is never mutated by editing).
+  **Still pending, explicitly not touched by Phase 3A**: Prompt Studio
+  (`agent-prompt-studio.tsx`, the standalone `/prompt-studio` route), the Knowledge and
+  Tools *top-level* tabs, and — deliberately, within the Configuration tab itself —
+  the Knowledge/Tools *sections*, which still read/write `stores/agent-builder-store.ts`
+  (kept as a documented compatibility adapter, not deleted). List/detail screens no
+  longer show call counts, success rate, or last-updated for repository-sourced
+  agents — the canonical `Agent` type has no such fields yet; that's the future Calls/
+  Analytics projection, not invented here. `lib/mock-data.ts`'s legacy `agents` fixture
+  is untouched and still read directly by `workflow-detail.tsx`, `tool-detail.tsx`, and
+  the dashboard page.
 - **Tools** — registry with typed inputs *and* outputs and a deterministic mock result
   per tool; list and detail views.
 - **Knowledge** — knowledge-source concepts and listing (retrieval is served through

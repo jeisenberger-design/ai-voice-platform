@@ -3,7 +3,8 @@ import { FormEvent, useMemo, useRef, useState } from 'react';
 import { Construction, Mic, Phone, PhoneOff, Play, Send, Sparkles } from 'lucide-react';
 import { Button, Card, Badge } from '@/components/ui';
 import { testScenarios, type TestScenario } from '@/lib/test-scenarios';
-import { useAgents, useWorkflows } from '@/hooks/use-platform-data';
+import { useWorkflows } from '@/hooks/use-platform-data';
+import { useAgents } from '@/hooks/use-agent-data';
 import {
   ExecutionRecorder,
   nextRunId,
@@ -29,7 +30,7 @@ type SessionControl = { submit: (text: string) => void; cancel: () => void };
 export function AgentTestingPanel({ agentId }: { agentId: string }) {
   const { data: agents } = useAgents();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
-  const agent = agents?.find((item) => item.id === agentId);
+  const agent = agents?.find((item) => item.agentId === agentId);
   const workflow = workflows?.find((item) => item.agentIds.includes(agentId));
 
   const [status, setStatus] = useState<Status>('idle');

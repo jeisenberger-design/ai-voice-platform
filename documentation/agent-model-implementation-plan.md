@@ -1,7 +1,9 @@
 # Agent Model — Implementation Plan
 
-Status: **Phases 1–2 landed** (canonical types + repository + migration; runtime
-provenance + version pinning. Phases 3–5 still proposed, not implemented). Extends
+Status: **Phases 1–2 landed; Phase 3 split into 3A (landed) and 3B (not started)**.
+Phase 3A is canonical draft plumbing + Agent Builder migration only — Prompt Studio,
+Tools, Knowledge, and publish/version-history UI are explicitly Phase 3B, not this
+pass. Phases 4–5 still proposed, not implemented. Extends
 `documentation/agent-model-design.md`'s approved target model with the draft/publish/
 versioning mechanics that document explicitly left as a named, unresolved gap (see §4
 below) — this plan makes that decision, now recorded as its own approved addendum in
@@ -86,6 +88,76 @@ get real resolved provenance underneath since it already calls the now-upgraded
 default to the same shared singleton). `Workflow.agentIds` is still the vehicle for
 "which agent(s) does this workflow reference" — not inverted, per Phase 1's own
 boundary, still correct in Phase 2.
+
+**Phase 3A, as implemented:** canonical draft plumbing and Agent Builder migration
+only — no Prompt Studio, Tools, Knowledge, backend persistence, authentication,
+telephony, or analytics work in this pass.
+
+- `hooks/use-agent-data.ts` (new) — `useAgents`, `useAgent`, `useAgentDraft`,
+  `useUpdateAgentDraft`, `useCreateAgent`, all thin React Query wrappers over the one
+  shared `getDefaultAgentRepository()` singleton (built in Phase 2). No
+  `useAgentVersions`/`usePublishAgent` yet — nothing in this phase needs them.
+- `hooks/use-platform-data.ts`, `lib/mock-api.ts` — `useAgents`/`listAgents` **removed**
+  (moved to `use-agent-data.ts`, not duplicated). `mockApi.getDashboard()`'s `agents`
+  field is untouched — the dashboard page bypasses hooks entirely via a pre-existing
+  direct `mock-data.ts` import, out of scope.
+- `lib/agent-validation.ts` — now validates `Record<InstructionSection, string>`
+  directly instead of `AgentBuilderConfig`; same 4 required sections, same severity
+  logic. No dependency on the legacy store's shape at all anymore.
+- `components/agent-validation-summary.tsx` — takes `instructions` as a prop instead of
+  reading `useAgentBuilderStore` itself.
+- `components/structured-editor.tsx` — **hybrid, deliberately**: of its 9 Configuration
+  sub-tabs, 7 (Identity, Personality, Conversation Rules, Transfers, Memory,
+  Guardrails, Output Schema) read/write the canonical draft via new `instructions`/
+  `onChangeSection` props; Knowledge and Tools keep reading/writing
+  `stores/agent-builder-store.ts` exactly as before. See §11 risk 2's update below for
+  why this split exists and isn't a technical-dependency violation.
+- `components/agent-detail-workspace.tsx` — `useAgent(agentId)` (not a client-side
+  filter over the full list) for canonical loading + not-found; `useAgentDraft`/
+  `useUpdateAgentDraft` for the draft. **Save behavior decision: explicit save**, not
+  autosave — edits accumulate in local component state (`staged`, a plain
+  `Partial<Record<InstructionSection,string>>`, not Zustand/localStorage) and only
+  reach the repository on "Save changes," as one atomic `updateDraft` call; "Discard"
+  clears the stage without touching the repository. Chosen because the *visible*
+  existing UI (Save/Discard buttons, an unsaved-changes badge, a beforeunload guard)
+  is already an explicit-save pattern users have been trained on, and ripping it out
+  for autosave would be exactly the "redesign the Agent Builder" this task forbids —
+  even though the *old* Zustand store secretly persisted "unsaved" edits to
+  localStorage on every keystroke regardless, so this is arguably a correctness fix
+  (unsaved now genuinely means "not written anywhere") as much as a preservation.
+  `agent.purpose`/`.voice`/`.calls`/`.successRate` (legacy-only fields, absent from
+  the canonical `Agent` type) are replaced: the header subtitle now reads
+  `draft.voice` (a real canonical field); Overview's calls/success-rate/duration stats
+  show `—` placeholders with a comment pointing at the future Calls/Analytics
+  projection, per this task's "do not add new legacy-fixture reads" constraint.
+- `components/agent-testing-panel.tsx` — import path (`use-platform-data` →
+  `use-agent-data`) and `.id` → `.agentId` only; no behavior change.
+- `app/(platform)/agents/page.tsx` — reads canonical `Agent[]`; `.id` → `.agentId`;
+  calls/success-rate/last-updated columns replaced with `—` placeholders (same
+  reasoning as above).
+- `app/(platform)/agents/new/page.tsx` — replaces the "not yet available" placeholder
+  with a real form (name input + `useCreateAgent()`), navigating to
+  `/agents/${agent.agentId}` on success. No publish call — matches `createAgent`'s
+  existing Phase 1 behavior (draft only).
+- `stores/agent-builder-store.ts` — **adapted, not removed**. Now a documented
+  compatibility adapter, narrowed in practice to Knowledge/Tools (and the
+  already-dead "Voice Settings" branch). See its own header comment for the precise
+  removal condition (once Tools/Knowledge migrate onto the canonical draft).
+- Tests: `lib/agent-validation.test.ts` (new), `hooks/use-agent-data.test.ts` (new,
+  9 tests exercising the real `getDefaultAgentRepository()` singleton directly — no
+  component-test harness exists in this repo, so this is the faithful proxy for
+  "hooks observe shared state," per §11 risk 8's already-established convention).
+
+**Explicitly not done in Phase 3A** (Phase 3B's job): `agent-prompt-studio.tsx` and
+`app/(platform)/prompt-studio/page.tsx` — completely untouched, including the
+`/prompt-studio` route's missing-`agentId` gap named in §11 risk 1 below, still
+unresolved. `ToolsPanel`/`KnowledgePanel`'s top-level tab bodies — untouched, still
+hardcoded local state / static markup. Knowledge/Tools *sections* within the
+Configuration tab — untouched, still on the legacy store. Publishing and version
+history (`VersionsPanel`) — untouched, still hardcoded; no publish button exists
+anywhere in the UI yet. `lib/mock-data.ts`'s `Agent`/`agents` — not removed; still
+read directly by `workflow-detail.tsx`, `tool-detail.tsx`, and the dashboard page
+(`app/(platform)/page.tsx`), none of which were in scope.
 
 ## 1. Every current Agent representation
 
@@ -416,16 +488,31 @@ named exist in `lib/conversation-runtime.test.ts`, plus explicit-failure coverag
 missing agent/version that this section didn't originally call out but Phase 2
 requirement 6 (the follow-up task that executed this phase) did.
 
-**Phase 3 — Screen wiring.**
-`structured-editor.tsx`, `agent-prompt-studio.tsx` (+ its route prop gap — see §11),
-`agent-detail-workspace.tsx`'s `ToolsPanel`/`KnowledgePanel`/`VersionsPanel`,
-`agent-testing-panel.tsx`, `use-platform-data.ts`/`mock-api.ts`.
-Tests: all these screens read/write the *same* draft (assert two "screens" driven off
-the same `agentId` see each other's uncommitted edits); `AgentTestingPanel` resolves
-and pins the published version at session start; a component test (or targeted unit
-test on the resolution function, since this repo has no component-test harness — see
-`agent-model-design.md`'s conventions) confirming resolution never falls back to the
-old `mock-data.ts` fixture.
+**Phase 3 — Screen wiring. Split into 3A and 3B**, a narrowing this plan didn't
+originally propose (decided at the task level, not this document, when Phase 3 turned
+out too large for one coherent pass).
+
+**Phase 3A — Landed.** Canonical draft plumbing (`hooks/use-agent-data.ts`) + Agent
+Builder migration for exactly 7 of 9 Configuration sections (identity, personality,
+conversation rules, transfers, memory, guardrails, output schema) + Agent creation +
+canonical listing/detail loading. See the "Phase 3A, as implemented" note near the top
+of this document for the exact file list, the explicit-save decision, and what's
+deliberately still deferred. Tests exist in `hooks/use-agent-data.test.ts` and
+`lib/agent-validation.test.ts` — written against the real shared repository singleton
+directly (no component-test harness, per the existing convention this section already
+anticipated) rather than rendering `structured-editor.tsx`/`agent-detail-workspace.tsx`
+themselves.
+
+**Phase 3B — Not started.** `agent-prompt-studio.tsx` (+ its route prop gap — see
+§11), `agent-detail-workspace.tsx`'s `ToolsPanel`/`KnowledgePanel`/`VersionsPanel`,
+`structured-editor.tsx`'s remaining Knowledge/Tools sections, `agent-testing-panel.tsx`
+resolving+pinning the published version at `beginSession()` (today it still just
+displays the agent's name — the session it drives is already provenance-pinned
+transparently via Phase 2, but the panel itself doesn't do that resolution or expose
+it), and publishing/version-history UI. Tests: all these screens read/write the *same*
+draft (assert two "screens" driven off the same `agentId` see each other's
+uncommitted edits) — Phase 3A's tests already establish this pattern works via the
+repository directly; Phase 3B extends it to the newly-wired screens.
 
 **Phase 4 — Cleanup.**
 Remove `stores/agent-builder-store.ts`, `Agent`/`agents` from `mock-data.ts`. Grep the
@@ -449,13 +536,20 @@ simple grep-based test) asserting no file imports `Agent`/`agents` from
    Phase 1** — this is Phase 3 (screen wiring) work, since it requires
    `agent-prompt-studio.tsx`'s `agentId` prop and `useAgentDraft`/`usePublishAgent`
    from Phase 3's hook layer, neither of which exists yet.
-2. **`AgentPromptStudio`'s 8 sections don't map 1:1 onto the canonical 14.** Proposed
-   mapping: `Identity`→`Identity`, `Greeting`→`Identity` (folded in, greeting is part
-   of identity/opening behavior), `Conversation Rules`→`Conversation Rules`,
-   `Knowledge Instructions`→`Knowledge`, `Emergency Rules`→`Guardrails`,
-   `Transfer Rules`→`Transfers`, `Data Collection`→`Output Format`,
-   `Output Schema`→`Output Schema`. This is a judgment call, not a fact derived from
-   either source file — flagging for explicit confirmation rather than assuming.
+2. **`AgentPromptStudio`'s 8 sections don't map 1:1 onto the canonical 14. Still
+   unresolved — `agent-prompt-studio.tsx` wasn't touched in Phase 3A.** Proposed
+   mapping unchanged from before: `Identity`→`Identity`, `Greeting`→`Identity` (folded
+   in, greeting is part of identity/opening behavior), `Conversation Rules`→
+   `Conversation Rules`, `Knowledge Instructions`→`Knowledge`, `Emergency Rules`→
+   `Guardrails`, `Transfer Rules`→`Transfers`, `Data Collection`→`Output Format`,
+   `Output Schema`→`Output Schema`. Still a judgment call for whenever Phase 3B
+   migrates this component. A related, narrower split *did* land in Phase 3A, inside
+   `structured-editor.tsx` itself (a different component from `AgentPromptStudio`):
+   its own 9 Configuration sub-tabs split cleanly into 7 migrated (identity,
+   personality, conversation rules, transfers, memory, guardrails, output schema) and
+   2 deliberately not (Knowledge, Tools — overlapping the separately-scoped
+   `knowledgeSourceIds`/`toolIds` capability work). No technical dependency forced
+   scope expansion; the split is documented in `structured-editor.tsx` itself.
 3. **Knowledge source ids don't exist yet.** Minting them (`lib/mock-data.ts`'s
    `sources`) is a small, additive, low-risk change, but it's technically outside
    "the Agent model" narrowly read — flagging so it isn't a surprise scope addition.
@@ -485,10 +579,14 @@ simple grep-based test) asserting no file imports `Agent`/`agents` from
    result data objects. `'unknown'` is the sentinel for "not resolved," matching the
    existing `promptVersion`/`model`/`voice` fallback pattern rather than inventing a
    new one.
-6. **Orphaned localStorage keys.** Removing `agent-builder-store.ts` leaves any
-   existing `relay-agent-builder-${agentId}` browser keys unread and unreachable.
-   Harmless (mock data, no user-facing consequence), not worth writing cleanup code
-   for — noting only so it isn't mistaken for a bug later.
+6. **Orphaned localStorage keys. Partially superseded — the store wasn't removed in
+   Phase 3A, only narrowed.** `agent-builder-store.ts` still exists, still persists to
+   `relay-agent-builder-${agentId}`, but is now authoritative for only 2 of its 14
+   sections (Knowledge, Tools) — the other 12 keys inside each stored blob (Identity,
+   Personality, Purpose, etc.) are still physically present in localStorage but no
+   longer read by anything. Harmless, same reasoning as before. This note becomes
+   literally accurate again — full removal, real orphaning — once Phase 3B migrates
+   Knowledge/Tools and the file is actually deleted.
 7. **`Agent.status` vs `AgentVersion.status` naming collision**, already resolved in
    §5/§4.B by keeping them on separate types — flagged here as the kind of thing worth
    double-checking during Phase 3 screen wiring, where both are likely to be read in

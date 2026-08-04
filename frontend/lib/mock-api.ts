@@ -9,10 +9,6 @@ export const mockApi = {
     await pause();
     return { activity, agents, metrics, weeklyCalls };
   },
-  async listAgents() {
-    await pause();
-    return agents;
-  },
   async listKnowledgeSources() {
     await pause();
     return sources;

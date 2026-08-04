@@ -4,7 +4,6 @@ import { mockApi } from '@/lib/mock-api';
 
 export const platformQueryKeys = {
   dashboard: ['dashboard'] as const,
-  agents: ['agents'] as const,
   knowledgeSources: ['knowledge-sources'] as const,
 };
 export function useDashboard() {
@@ -14,13 +13,9 @@ export function useDashboard() {
     staleTime: 30_000,
   });
 }
-export function useAgents() {
-  return useQuery({
-    queryKey: platformQueryKeys.agents,
-    queryFn: mockApi.listAgents,
-    staleTime: 30_000,
-  });
-}
+// Agent listing/detail/draft hooks moved to hooks/use-agent-data.ts, backed by the
+// canonical AgentRepository — see documentation/agent-model-implementation-plan.md
+// Phase 3A. mockApi.listAgents (below) is unused now that useAgents() lives there.
 export function useKnowledgeSources() {
   return useQuery({
     queryKey: platformQueryKeys.knowledgeSources,

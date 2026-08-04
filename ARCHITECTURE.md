@@ -426,6 +426,26 @@ and what's not built yet.
   the complete binding, always present regardless of which nodes a run visits (see
   "Runtime Interfaces" above). UI screens still read the old `mock-data.ts` fixture for
   display — that's Phase 3.
+- **Agent Model (Phase 3A — canonical draft + Builder migration)** — the first UI
+  screens now read/write the Phase 1 repository instead of fixtures. Agent listing,
+  detail loading, and creation (`hooks/use-agent-data.ts`) all resolve by stable
+  `agentId` through the one shared `getDefaultAgentRepository()` singleton — never a
+  second instance per component/hook/route. Agent creation (`app/(platform)/agents/new`)
+  writes a canonical `Agent` + empty draft, never auto-published. Of `structured-editor.tsx`'s
+  9 Configuration sub-tabs, **7** — Identity, Personality, Conversation Rules, Transfers,
+  Memory, Guardrails, Output Schema — now read/write the canonical draft via explicit
+  save (edits stage in local component state; "Save changes" writes the whole patch in
+  one `updateDraft` call; a published `AgentVersion` is never mutated). **Knowledge and
+  Tools stay on `stores/agent-builder-store.ts`** — deliberately excluded from this
+  pass (see that file's own header comment for the exact removal condition) since those
+  names overlap with the separately-scoped `Agent.knowledgeSourceIds`/`toolIds`
+  capability work, not touched here. Prompt Studio, the Tools/Knowledge top-level tabs,
+  publishing, and version history remain entirely on their pre-existing (disconnected
+  or fixture-backed) implementations — this is not the full Agent configuration path
+  unified, only Builder identity/personality/rules/transfers/memory/guardrails/output
+  schema. `lib/mock-data.ts`'s `agents` fixture is untouched and still read directly by
+  `workflow-detail.tsx`, `tool-detail.tsx`, and the dashboard page — none of those were
+  in scope.
 
 ## Known architectural debt
 

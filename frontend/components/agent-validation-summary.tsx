@@ -2,11 +2,14 @@
 import { AlertTriangle, CheckCircle2, ChevronRight, ShieldCheck } from 'lucide-react';
 import { Card, Badge } from '@/components/ui';
 import { validateAgentConfig } from '@/lib/agent-validation';
-import { useAgentBuilderStore } from '@/stores/agent-builder-store';
+import type { InstructionSection } from '@/lib/agent-model';
 
-export function AgentValidationSummary({ agentId }: { agentId: string }) {
-  const config = useAgentBuilderStore(agentId, (state) => state.config);
-  const results = validateAgentConfig(config);
+export function AgentValidationSummary({
+  instructions,
+}: {
+  instructions: Record<InstructionSection, string>;
+}) {
+  const results = validateAgentConfig(instructions);
   const issues = results.filter((result) => result.severity !== 'pass');
   return (
     <Card className="mb-6 p-4">

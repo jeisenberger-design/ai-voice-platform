@@ -1,20 +1,22 @@
-import type { AgentBuilderConfig, BuilderSection } from '@/stores/agent-builder-store';
+import type { InstructionSection } from '@/lib/agent-model';
 
 export type ValidationResult = {
-  section: BuilderSection;
+  section: InstructionSection;
   title: string;
   detail: string;
   severity: 'error' | 'warning' | 'pass';
 };
-const required: Array<[BuilderSection, string]> = [
+const required: Array<[InstructionSection, string]> = [
   ['Identity', 'Define who the agent is.'],
   ['Purpose', 'Define the goal of each conversation.'],
   ['Behavior Rules', 'Add behavior rules before publishing.'],
   ['Transfers', 'Define how and when the agent transfers a caller.'],
 ];
-export function validateAgentConfig(config: AgentBuilderConfig): ValidationResult[] {
+export function validateAgentConfig(
+  instructions: Record<InstructionSection, string>,
+): ValidationResult[] {
   return required.map(([section, detail]) => {
-    const value = config.sections[section].trim();
+    const value = instructions[section].trim();
     if (!value) return { section, title: `${section} is required`, detail, severity: 'error' };
     if (value.length < 24)
       return {

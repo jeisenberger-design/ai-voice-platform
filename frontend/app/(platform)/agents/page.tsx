@@ -4,16 +4,19 @@ import { BarChart3, Copy, MoreHorizontal, Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import { PageHeader } from '@/components/page-header';
-import { useAgents } from '@/hooks/use-platform-data';
-import type { Agent } from '@/lib/mock-data';
+import { useAgents } from '@/hooks/use-agent-data';
+import type { Agent } from '@/lib/agent-model';
 export default function Agents() {
   const { data = [] } = useAgents();
   const [overrides, setOverrides] = useState<Record<string, Agent['status']>>({});
-  const items = data.map((agent) => ({ ...agent, status: overrides[agent.id] ?? agent.status }));
+  const items = data.map((agent) => ({
+    ...agent,
+    status: overrides[agent.agentId] ?? agent.status,
+  }));
   const toggle = (agent: Agent) =>
     setOverrides((current) => ({
       ...current,
-      [agent.id]: agent.status === 'Active' ? 'Paused' : 'Active',
+      [agent.agentId]: agent.status === 'Active' ? 'Paused' : 'Active',
     }));
   return (
     <>
@@ -53,24 +56,26 @@ export default function Agents() {
             </thead>
             <tbody>
               {items.map((a) => (
-                <tr className="border-b last:border-0" key={a.id}>
+                <tr className="border-b last:border-0" key={a.agentId}>
                   <td className="px-5 py-4">
-                    <Link href={`/agents/${a.id}`} className="font-medium hover:underline">
+                    <Link href={`/agents/${a.agentId}`} className="font-medium hover:underline">
                       {a.name}
                     </Link>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{a.purpose}</p>
                   </td>
                   <td className="px-5 py-4">
                     <Badge variant={a.status === 'Active' ? 'success' : 'neutral'}>
                       {a.status}
                     </Badge>
                   </td>
-                  <td className="px-5 py-4">{a.calls.toLocaleString()}</td>
-                  <td className="px-5 py-4">{a.successRate ? `${a.successRate}%` : '—'}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{a.updated}</td>
+                  {/* Calls/success-rate/last-updated have no canonical home yet — that's
+                      the future Calls/Analytics projection (see ARCHITECTURE.md's
+                      roadmap), not something Phase 3A invents. */}
+                  <td className="px-5 py-4 text-muted-foreground">—</td>
+                  <td className="px-5 py-4 text-muted-foreground">—</td>
+                  <td className="px-5 py-4 text-muted-foreground">—</td>
                   <td className="px-5 py-4">
                     <div className="flex gap-1">
-                      <Link href={`/agents/${a.id}`}>
+                      <Link href={`/agents/${a.agentId}`}>
                         <Button variant="ghost" aria-label="Edit agent">
                           Edit
                         </Button>

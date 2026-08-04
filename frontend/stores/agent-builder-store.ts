@@ -1,4 +1,18 @@
 'use client';
+// COMPATIBILITY ADAPTER — as of Phase 3A (documentation/agent-model-implementation-plan.md),
+// this store is NO LONGER the authoritative source for Identity, Description, Purpose,
+// Personality, Language, Behavior Rules, Conversation Rules, Transfers, Memory,
+// Guardrails, Output Format, or Output Schema — those 7 editable sections now live on
+// the canonical Agent draft (lib/agent-repository.ts) and reach `structured-editor.tsx`
+// via props, not this store. This store remains authoritative ONLY for the Knowledge
+// and Tools free-text policy sections (structured-editor.tsx's "Knowledge"/"Tools"
+// sub-tabs — distinct from Agent.knowledgeSourceIds/toolIds, the separate capability
+// lists that haven't been touched at all) and the still-unreachable "Voice Settings"
+// branch (dead code today — no `configSections` entry ever renders it).
+//
+// Removal condition: once Tools/Knowledge migrate onto the canonical draft (a later
+// phase), delete this file entirely and drop its two remaining call sites in
+// structured-editor.tsx.
 import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { persist } from 'zustand/middleware';
 
