@@ -119,4 +119,21 @@ describe('rollbackDraftToVersion', () => {
       rollbackDraftToVersion(repo, agent.agentId, 'not-a-real-version'),
     ).rejects.toThrow();
   });
+
+  it('the rolled-back draft never shares array/object instances with the immutable source version', async () => {
+    const agent = await repo.createAgent({ name: 'Rollback Reference Independence' });
+    await repo.updateDraft(agent.agentId, {
+      instructions: validRequiredSections,
+      knowledgeSourceIds: ['ks1', 'ks2'],
+      toolIds: ['tool_calendar_availability'],
+    });
+    const v1 = await publishAgentDraft(repo, agent.agentId);
+
+    const rolledBackDraft = await rollbackDraftToVersion(repo, agent.agentId, v1.versionId);
+
+    expect(rolledBackDraft.knowledgeSourceIds).toEqual(v1.knowledgeSourceIds);
+    expect(rolledBackDraft.knowledgeSourceIds).not.toBe(v1.knowledgeSourceIds);
+    expect(rolledBackDraft.toolIds).not.toBe(v1.toolIds);
+    expect(rolledBackDraft.instructions).not.toBe(v1.instructions);
+  });
 });

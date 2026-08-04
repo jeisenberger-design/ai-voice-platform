@@ -81,6 +81,27 @@ describe('LocalAgentRepository', () => {
     expect(stillThere?.voice).not.toBe('Second voice');
   });
 
+  it('publish snapshots a deep, independent copy — the new version never shares array/object instances with the draft it was published from', async () => {
+    await repo.updateDraft('a1', {
+      knowledgeSourceIds: ['ks1'],
+      toolIds: ['tool_calendar_availability'],
+    });
+    const draftBeforePublish = await repo.getDraft('a1');
+    const published = await repo.publish('a1');
+
+    // Same content...
+    expect(published.instructions).toEqual(draftBeforePublish.instructions);
+    expect(published.knowledgeSourceIds).toEqual(draftBeforePublish.knowledgeSourceIds);
+    expect(published.toolIds).toEqual(draftBeforePublish.toolIds);
+    // ...but never the same object/array instance. If it were, any future in-place
+    // mutation of the draft's nested fields (rather than always replacing them, which
+    // is all this codebase's UI does today) would silently corrupt "immutable" history.
+    expect(published.instructions).not.toBe(draftBeforePublish.instructions);
+    expect(published.knowledgeSourceIds).not.toBe(draftBeforePublish.knowledgeSourceIds);
+    expect(published.toolIds).not.toBe(draftBeforePublish.toolIds);
+    expect(published.workflowIds).not.toBe(draftBeforePublish.workflowIds);
+  });
+
   it('getPublishedVersion returns the latest published version, not the draft', async () => {
     await repo.updateDraft('a1', { voice: 'Draft-only edit' });
     const published = await repo.getPublishedVersion('a1');

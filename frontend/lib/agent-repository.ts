@@ -97,6 +97,30 @@ function emptyVersionConfig(): AgentVersionConfig {
   };
 }
 
+// Every AgentVersionConfig field that's an object/array (`instructions` and the three
+// id lists) is reference-copied by a plain `{ ...spread }` — the spread only copies the
+// top-level key, not the nested value. Without this, `publish()` and a rollback-style
+// `updateDraft()` call would leave a freshly "immutable" AgentVersion sharing the exact
+// same array/object instance as the mutable draft (or another version) it was copied
+// from — nothing in this codebase mutates those in place today, but a published
+// version's immutability must hold structurally, not just by caller discipline, since
+// the entire versioning model's value depends on it never being silently corrupted by
+// an edit to something that merely *used to* be the same object.
+function cloneVersionConfig(config: AgentVersionConfig): AgentVersionConfig {
+  return {
+    instructions: { ...config.instructions },
+    voice: config.voice,
+    model: config.model,
+    workflowIds: [...config.workflowIds],
+    knowledgeSourceIds: [...config.knowledgeSourceIds],
+    toolIds: [...config.toolIds],
+    transferPolicy: config.transferPolicy,
+    memory: config.memory,
+    guardrails: config.guardrails,
+    outputSchema: config.outputSchema,
+  };
+}
+
 export class LocalAgentRepository implements AgentRepository {
   private agents: Record<string, Agent>;
   private versions: Record<string, AgentVersion>;
@@ -160,6 +184,16 @@ export class LocalAgentRepository implements AgentRepository {
       instructions: patch.instructions
         ? { ...draft.instructions, ...patch.instructions }
         : draft.instructions,
+      // Always store our own array copies, never a reference the caller still holds —
+      // this matters most for rollback (lib/agent-publish.ts's rollbackDraftToVersion),
+      // which patches these fields directly from an immutable published AgentVersion's
+      // own arrays. Without cloning here, the draft and that version would end up
+      // sharing array instances after a rollback.
+      workflowIds: patch.workflowIds ? [...patch.workflowIds] : draft.workflowIds,
+      knowledgeSourceIds: patch.knowledgeSourceIds
+        ? [...patch.knowledgeSourceIds]
+        : draft.knowledgeSourceIds,
+      toolIds: patch.toolIds ? [...patch.toolIds] : draft.toolIds,
     };
     this.versions[draft.versionId] = updated;
     this.persist();
@@ -186,7 +220,11 @@ export class LocalAgentRepository implements AgentRepository {
     const versionId = `${agentId}-v${nextVersionNumber}`;
 
     const newVersion: AgentVersion = {
-      ...draft,
+      // A deep-enough clone (not a bare `...draft` shallow spread) so this new
+      // "immutable" version never shares its `instructions`/id-list array instances
+      // with the still-editable draft it was snapshotted from — see cloneVersionConfig
+      // above.
+      ...cloneVersionConfig(draft),
       versionId,
       agentId,
       versionNumber: nextVersionNumber,

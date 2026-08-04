@@ -53,6 +53,15 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
   const [ready, setReady] = useState(false);
   const [draft, setDraft] = useState('');
   const [scenario, setScenario] = useState<TestScenario | null>(null);
+  // useAgentPublishedVersion is a live query (staleTime: 0, refetches on window
+  // refocus) — perfectly fine while idle, but once a session is running its resolved
+  // AgentVersion is frozen for that session's lifetime (Phase 2's own pinning
+  // invariant). Without capturing it here, a concurrent publish elsewhere followed by
+  // this tab regaining focus could silently bump the *displayed* "Testing vN" badge to
+  // a newer version while the actual running session keeps using the one it was
+  // genuinely pinned to at start — exactly the "silently resolve latest" failure mode
+  // Phase 3B requirement 7 rules out.
+  const [pinnedVersionNumber, setPinnedVersionNumber] = useState<number | null>(null);
   const controlRef = useRef<SessionControl | null>(null);
   const pendingFirstMessage = useRef<string | null>(null);
   // Bumped on every beginSession()/end() so a session's onPause/then callbacks can tell
@@ -65,7 +74,7 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
   const turns = useMemo(() => projectConversation(events), [events]);
 
   const beginSession = () => {
-    if (!workflow) return;
+    if (!workflow || !publishedVersion) return;
     sessionToken.current += 1;
     const token = sessionToken.current;
     const runId = nextRunId();
@@ -75,6 +84,8 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
     setStatus('active');
     setEvents([]);
     setReady(false);
+    // Freeze the displayed version now — see the `pinnedVersionNumber` state comment.
+    setPinnedVersionNumber(publishedVersion.versionNumber);
 
     runConversationSession({
       workflow,
@@ -119,6 +130,7 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
     setEvents([]);
     setReady(false);
     setScenario(null);
+    setPinnedVersionNumber(null);
   };
 
   const send = (event: FormEvent) => {
@@ -176,7 +188,12 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="neutral">Testing v{publishedVersion.versionNumber}</Badge>
+          <Badge variant="neutral">
+            Testing v
+            {status === 'idle'
+              ? publishedVersion.versionNumber
+              : (pinnedVersionNumber ?? publishedVersion.versionNumber)}
+          </Badge>
           <Badge variant={status === 'active' ? 'success' : 'neutral'}>
             {status === 'active' ? 'Live simulation' : 'Ready'}
           </Badge>
