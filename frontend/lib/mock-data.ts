@@ -80,9 +80,23 @@ export const activity = [
   { title: 'Morgan was updated', detail: 'Prompt version 12 published', time: '1 hr ago' },
   { title: 'Transfer completed', detail: 'Support → billing queue', time: '2 hr ago' },
 ];
+// `id` is the stable, opaque identity — `name` is an editable display value and must
+// never be used as identity (see documentation/agent-model-implementation-plan.md §1).
 export const sources = [
-  { name: 'Customer onboarding guide.pdf', type: 'PDF', chunks: 84, updated: 'Jul 14, 2026' },
-  { name: 'Support knowledge base', type: 'Web sync', chunks: 312, updated: 'Jul 13, 2026' },
-  { name: 'Pricing FAQ.docx', type: 'DOCX', chunks: 42, updated: 'Jul 9, 2026' },
+  {
+    id: 'ks1',
+    name: 'Customer onboarding guide.pdf',
+    type: 'PDF',
+    chunks: 84,
+    updated: 'Jul 14, 2026',
+  },
+  {
+    id: 'ks2',
+    name: 'Support knowledge base',
+    type: 'Web sync',
+    chunks: 312,
+    updated: 'Jul 13, 2026',
+  },
+  { id: 'ks3', name: 'Pricing FAQ.docx', type: 'DOCX', chunks: 42, updated: 'Jul 9, 2026' },
 ];
 export const weeklyCalls = [520, 610, 570, 730, 680, 820, 760];

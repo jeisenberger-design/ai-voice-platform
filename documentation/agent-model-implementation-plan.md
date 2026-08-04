@@ -1,9 +1,19 @@
 # Agent Model — Implementation Plan
 
-Status: **Proposed** (planning only — no application code changed in this pass)
-Scope: frontend/mock only. Extends `documentation/agent-model-design.md`'s approved
+Status: **Phase 1 landed** (canonical types + repository + migration; Phases 2–5 still
+proposed, not implemented). Extends `documentation/agent-model-design.md`'s approved
 target model with the draft/publish/versioning mechanics that document explicitly
-left as a named, unresolved gap (see §4 below) — this plan makes that decision.
+left as a named, unresolved gap (see §4 below) — this plan makes that decision, now
+recorded as its own approved addendum in `agent-model-design.md` §9.
+
+**Phase 1, as implemented:** `lib/agent-model.ts`, `lib/agent-repository.ts`,
+`lib/agent-migration.ts`, plus `lib/agent-repository.test.ts` and
+`lib/agent-migration.test.ts`. `lib/mock-data.ts`'s `sources` gained a stable `id`
+field (see §1's knowledge-source-id gap, and §11 risk 3 — resolved as part of this
+phase rather than deferred, since `AgentVersionConfig.knowledgeSourceIds` cannot
+reference anything without it). Nothing in Phases 2–3 (runtime provenance, screen
+wiring) has changed: the execution engine and every UI screen still read only the old
+`lib/mock-data.ts` `Agent` fixture, per `ARCHITECTURE.md`.
 
 ## 1. Every current Agent representation
 
@@ -34,8 +44,13 @@ Two more gaps found that block part of the approved design, not just describe it
   (`{ name, type, chunks, updated }`) and `Workflow.knowledgeSources: string[]` both key
   by **name**, not id. `agent-model-design.md` §2 proposes
   `Agent.knowledgeSourceIds: string[]` "referencing types that already exist" — but no
-  id exists to reference. This must be resolved (mint a stable `id` on `sources`) before
-  that field can be implemented as literally specified.
+  id exists to reference. **Resolved in Phase 1**: `sources` gained a stable, opaque
+  `id` field (`ks1`/`ks2`/`ks3`), additive alongside the existing `name` — approved as
+  decision #2 of the versioning/knowledge-id/prompt-studio decision set. Nothing that
+  reads `source.name` today changed: `Workflow.knowledgeSources` and
+  `mock-runtime.ts`'s name-based matching are untouched and out of this phase's scope.
+  No fixture bound a legacy agent to a specific source, so migrated
+  `Agent.knowledgeSourceIds` seed empty (§11 risk 3) rather than fabricating a binding.
 - **The standalone `/prompt-studio` route has no agent binding.**
   `app/(platform)/prompt-studio/page.tsx` renders `<AgentPromptStudio />` with zero
   props — the same component the per-agent "Prompt Studio" tab renders. Under a
@@ -353,12 +368,15 @@ simple grep-based test) asserting no file imports `Agent`/`agents` from
 
 1. **The standalone `/prompt-studio` route has no `agentId`.** Under the canonical
    model this route cannot meaningfully edit or publish anything without one.
-   Options, none of which are free: (a) add a minimal agent picker (arguably a new
-   screen element, in tension with "do not redesign the screens"); (b) default it to
-   the first agent (silently wrong for every other agent, confusing); (c) leave it
-   degraded/disabled with an explanatory empty state until a picker is explicitly
-   requested. **Recommend (c)** — smallest footprint, honest about the gap, doesn't
-   invent new UX unasked. Needs your confirmation before Phase 3.
+   **Decided (supersedes this section's original recommendation of (c)):** the route
+   must not choose an implicit default agent. It becomes a lightweight Agent-selection
+   launcher — the actual Prompt Studio editor always operates with an explicit
+   `agentId` and the canonical Agent draft, never an implicit first-agent guess or a
+   degraded empty state. This is decision #3 of the versioning/knowledge-id/
+   prompt-studio decision set, approved alongside #1 and #2 above. **Not built in
+   Phase 1** — this is Phase 3 (screen wiring) work, since it requires
+   `agent-prompt-studio.tsx`'s `agentId` prop and `useAgentDraft`/`usePublishAgent`
+   from Phase 3's hook layer, neither of which exists yet.
 2. **`AgentPromptStudio`'s 8 sections don't map 1:1 onto the canonical 14.** Proposed
    mapping: `Identity`→`Identity`, `Greeting`→`Identity` (folded in, greeting is part
    of identity/opening behavior), `Conversation Rules`→`Conversation Rules`,

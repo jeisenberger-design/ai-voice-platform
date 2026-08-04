@@ -21,7 +21,11 @@ against typed fixtures and a mock runtime.
   drives a real test consultation through the Conversation Runtime (see below) rather
   than a local fake chat. The target Agent data model — currently fragmented across
   several disconnected surfaces in the actual code — has an approved design record at
-  `agent-model-design.md`; implementation hasn't started.
+  `agent-model-design.md`, including an approved Agent Versioning decision (§9): a
+  stable Agent owning one editable draft plus immutable published versions. Phase 1 of
+  its implementation plan has landed — `lib/agent-model.ts`, `lib/agent-repository.ts`,
+  `lib/agent-migration.ts` — but nothing reads it yet; every screen and the execution
+  engine still use the old `mock-data.ts` fixture until Phases 2–3 land.
 - **Tools** — registry with typed inputs *and* outputs and a deterministic mock result
   per tool; list and detail views.
 - **Knowledge** — knowledge-source concepts and listing (retrieval is served through

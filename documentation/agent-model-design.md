@@ -164,7 +164,9 @@ silently omitting it:
 - **Agent-initiated (function-calling) tool use** — `Agent.toolIds` declares capability
   now (§4); the engine gaining a path for the agent's own response to trigger a tool
   call is separate, larger work.
-- **Real prompt-version history storage** — named as a gap in §5, not resolved here.
+- **Real prompt-version history storage** — named as a gap in §5, **resolved by §9
+  below** (a separate, later-approved architecture decision, not part of this
+  document's original approval).
 - **The `Workflow.agentIds` → `Agent.workflowIds` data migration** — named as the
   correct direction in §3, not executed here.
 
@@ -176,7 +178,36 @@ silently omitting it:
 | Capability vs. invocation for Tools/Knowledge | **Both, as separate concepts** — `Agent.toolIds` (capability) alongside unchanged workflow-node bindings (invocation) | Preserves `ARCHITECTURE.md`'s existing second-source-of-truth reasoning for invocation while giving `ToolsPanel` a real backing model |
 | Agent↔Workflow ownership | **`Agent.workflowIds` is canonical going forward**; `Workflow.agentIds` migration is a follow-up, not immediate | Matches constitution and competitor product shape; avoids a disruptive rename in the same pass as the model definition |
 | Which existing surface seeds the canonical model | **`AgentBuilderConfig`** (section list + persistence pattern) | Closest existing artifact to the target; `AgentPromptStudio` and `ToolsPanel`'s local state are non-functional duplicates proposed for removal |
-| Real version history | **Named gap, not resolved here** | Needs a storage decision this doc doesn't have enough information to make yet |
+| Real version history | **Resolved — see §9** | Superseded by the approved Agent Versioning decision below |
+
+## 9. Addendum: Agent Versioning (approved)
+
+**Status: Approved.** This is a new architecture decision, layered on top of this
+document's original approval — not something §5–§8 above already decided. It resolves
+the "real prompt-version history storage" gap named in §7/§5 and is implemented by
+`documentation/agent-model-implementation-plan.md` (Phase 1: `lib/agent-model.ts`,
+`lib/agent-repository.ts`, `lib/agent-migration.ts`).
+
+**The decision:** a stable `Agent` owns exactly one editable draft `AgentVersion` and
+zero or more immutable published `AgentVersion`s.
+
+- **Editing only ever touches the draft.** `Agent.draftVersionId` always resolves —
+  every agent always has exactly one open draft, never `null`.
+- **Publishing creates a new snapshot and never mutates a prior version.** Each publish
+  produces a new `AgentVersion` record (`versionNumber` incrementing, `versionId`
+  deterministic — `${agentId}-v${versionNumber}`) and repoints
+  `Agent.publishedVersionId` at it. Every previously published version remains
+  unchanged and fully readable.
+- **Conversation sessions pin one `AgentVersion` at session start.** A runtime
+  (`AgentTestingPanel`, or any future execution path) resolves
+  `getPublishedVersion(agentId)` once, at the moment a session begins, and uses that
+  resolved version for the session's lifetime — a version published mid-session must
+  not retroactively change an in-flight run. (Wiring this into `consultWorkflow`'s
+  event stream is Phase 2 of the implementation plan, not yet done.)
+- `Agent.status` (operational: `'Active' | 'Draft' | 'Paused'`) and
+  `AgentVersion.status` (version-lifecycle: `'draft' | 'published'`) are deliberately
+  separate fields on separate types — they name different concepts and must not
+  collide.
 
 ## Explicitly preserved
 

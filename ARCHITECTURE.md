@@ -9,10 +9,14 @@ For product vision and behavioral ground rules, see `CLAUDE.md` and
 `documentation/project-constitution.md`. For the Conversation Runtime's design record
 (the decisions, not just the current shape), see
 `documentation/conversation-runtime-design.md`. For the Agent data model's design
-record, see `documentation/agent-model-design.md` — **approved, not yet implemented**;
-today's `Agent` type (`lib/mock-data.ts`) remains the only Agent-related model the
-execution engine actually reads. This file is the map; those are the minutes of the
-meetings where the map was drawn.
+record, see `documentation/agent-model-design.md` — **approved; Phase 1 of its implementation
+plan has landed** (`lib/agent-model.ts`, `lib/agent-repository.ts`,
+`lib/agent-migration.ts` — canonical types, a versioned draft/publish repository, and
+a one-time fixture migration, all tested). Today's `Agent` type (`lib/mock-data.ts`)
+still remains the only Agent-related model the execution engine and every UI screen
+actually read — Phase 1 added the persistence layer but wired nothing to it yet; that's
+Phases 2 (runtime provenance) and 3 (screen wiring). This file is the map; those are
+the minutes of the meetings where the map was drawn.
 
 ## Scope
 
@@ -372,6 +376,16 @@ and what's not built yet.
   `status`/`error` preserved through to `tool.returned`; and `runConversationSession`,
   the one shared envelope both the "Run test" button and agent testing now call
   (`lib/conversation-runtime.ts`, `lib/workflow-consultation.ts`).
+- **Agent Model (repository layer)** — Phase 1 of
+  `documentation/agent-model-implementation-plan.md`: canonical `Agent`/`AgentVersion`
+  types, an `AgentRepository` with a `LocalAgentRepository` implementation (draft is
+  always exactly one and always resolvable; publishing snapshots a new immutable
+  version and never mutates a prior one), and a pure, deterministic migration seeding
+  the 4 fixture agents into that shape (`lib/agent-model.ts`, `lib/agent-repository.ts`,
+  `lib/agent-migration.ts`). The Agent Versioning decision this implements is now
+  recorded in `agent-model-design.md` §9. Not yet consumed by anything — the execution
+  engine and every UI screen still read the old `mock-data.ts` fixture; that's Phases 2
+  and 3.
 
 ## Known architectural debt
 
