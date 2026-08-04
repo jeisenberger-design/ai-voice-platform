@@ -41,6 +41,14 @@ export type ExecutionInput = {
   runtime: PlatformRuntime;
   meta: RuntimeCallMeta;
   workflowId: string;
+  /**
+   * The pinned AgentVersion id for this node's agent ref, resolved once at session
+   * start (see runConversationSession) and threaded in by consultWorkflow — never
+   * looked up fresh here. Undefined when the node isn't an agent node, or when the
+   * caller didn't opt into version pinning (e.g. tests exercising consultation
+   * mechanics directly, predating the Agent Model).
+   */
+  agentVersionId?: string;
 };
 
 export type ExecutionResult = {
@@ -91,7 +99,7 @@ const trigger: NodeExecutor = async ({ node, context, outgoing, runtime, meta, w
   };
 };
 
-const agent: NodeExecutor = async ({ node, context, outgoing, runtime, meta }) => {
+const agent: NodeExecutor = async ({ node, context, outgoing, runtime, meta, agentVersionId }) => {
   const agentId = node.ref?.type === 'agent' ? node.ref.id : undefined;
   if (!agentId) {
     return {
@@ -100,7 +108,13 @@ const agent: NodeExecutor = async ({ node, context, outgoing, runtime, meta }) =
       nextEdgeId: firstEdgeId(outgoing),
     };
   }
-  const result = await runtime.agent.respond({ agentId, instruction: node.label, context, meta });
+  const result = await runtime.agent.respond({
+    agentId,
+    agentVersionId: agentVersionId ?? 'unknown',
+    instruction: node.label,
+    context,
+    meta,
+  });
   return {
     context: appendTurn(context, { speaker: 'agent', text: result.text }),
     detail: `Agent responded · ${result.promptVersion}`,

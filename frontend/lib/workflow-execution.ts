@@ -22,6 +22,7 @@ import { projectPath } from '@/lib/workflow-projections';
 import { createMockRuntime } from '@/lib/runtime/mock-runtime';
 import type { PlatformRuntime } from '@/lib/runtime/contracts';
 import { runConversationSession } from '@/lib/conversation-runtime';
+import type { AgentRepository } from '@/lib/agent-repository';
 
 export type NodeRunStatus = 'pending' | 'active' | 'completed' | 'skipped';
 
@@ -37,6 +38,7 @@ export type WorkflowRun = {
 export async function simulateWorkflowRun(
   workflow: Workflow,
   runtime: PlatformRuntime = createMockRuntime(),
+  agentRepository?: AgentRepository,
 ): Promise<WorkflowRun> {
   const runId = nextRunId();
   // Phase 2: one run == one session, driven end-to-end by the shared session runner. A
@@ -49,6 +51,7 @@ export async function simulateWorkflowRun(
     runtime,
     recorder,
     runId,
+    agentRepository,
   });
 
   const events = recorder.list();

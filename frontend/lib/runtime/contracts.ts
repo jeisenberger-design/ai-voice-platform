@@ -20,6 +20,14 @@ export type RuntimeCallMeta = { runId: string; nodeId?: string; stepId?: string 
 
 export type AgentRequest = {
   agentId: string;
+  /**
+   * The pinned AgentVersion snapshot to resolve, per
+   * documentation/agent-model-implementation-plan.md Phase 2 — resolved once at session
+   * start (see runConversationSession), never re-resolved per call. `'unknown'` when the
+   * caller didn't opt into version pinning (e.g. tests exercising consultation mechanics
+   * directly, predating the Agent Model).
+   */
+  agentVersionId: string;
   /** What the workflow node is asking the agent to do. */
   instruction: string;
   /** Read-only execution context; the runtime must not mutate it. */
@@ -29,6 +37,8 @@ export type AgentRequest = {
 
 export type AgentResult = {
   agentId: string;
+  /** Echoes back the resolved AgentVersion's id — 'unknown' if it didn't resolve. */
+  agentVersionId: string;
   /** Resolved prompt/version configuration used for this turn. */
   promptVersion: string;
   model: string;

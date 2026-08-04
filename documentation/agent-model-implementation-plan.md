@@ -1,19 +1,81 @@
 # Agent Model — Implementation Plan
 
-Status: **Phase 1 landed** (canonical types + repository + migration; Phases 2–5 still
-proposed, not implemented). Extends `documentation/agent-model-design.md`'s approved
-target model with the draft/publish/versioning mechanics that document explicitly
-left as a named, unresolved gap (see §4 below) — this plan makes that decision, now
-recorded as its own approved addendum in `agent-model-design.md` §9.
+Status: **Phases 1–2 landed** (canonical types + repository + migration; runtime
+provenance + version pinning. Phases 3–5 still proposed, not implemented). Extends
+`documentation/agent-model-design.md`'s approved target model with the draft/publish/
+versioning mechanics that document explicitly left as a named, unresolved gap (see §4
+below) — this plan makes that decision, now recorded as its own approved addendum in
+`agent-model-design.md` §9.
 
 **Phase 1, as implemented:** `lib/agent-model.ts`, `lib/agent-repository.ts`,
 `lib/agent-migration.ts`, plus `lib/agent-repository.test.ts` and
 `lib/agent-migration.test.ts`. `lib/mock-data.ts`'s `sources` gained a stable `id`
 field (see §1's knowledge-source-id gap, and §11 risk 3 — resolved as part of this
 phase rather than deferred, since `AgentVersionConfig.knowledgeSourceIds` cannot
-reference anything without it). Nothing in Phases 2–3 (runtime provenance, screen
-wiring) has changed: the execution engine and every UI screen still read only the old
-`lib/mock-data.ts` `Agent` fixture, per `ARCHITECTURE.md`.
+reference anything without it).
+
+**Phase 2, as implemented:** runtime provenance and version pinning only — no Agent
+Builder/Prompt Studio/Tools/Knowledge/Calls migration, no backend/auth/telephony.
+
+- `lib/workflow-events.ts` — `EventIdentity` gains `workflowId`/`workflowVersion`
+  (always present) and `agentId`/`agentVersionId` (present only when the workflow
+  references exactly one distinct agent — see §11 risk 4). New exported `RunProvenance`
+  type. `ExecutionRecorder` gains `setProvenance(provenance)`, callable only before the
+  first `emit()` (throws otherwise), stamped onto every subsequent event. `agent.started`/
+  `agent.responded` payloads gain their own `agentVersionId` (`'unknown'` sentinel when
+  unresolved — the same treatment `promptVersion`/`model`/`voice` already used), so a
+  hypothetical multi-agent workflow still gets correct per-node provenance even when the
+  run-level default is absent.
+- `lib/runtime/contracts.ts` — `AgentRequest` gains `agentVersionId: string`;
+  `AgentResult` gains `agentVersionId: string` (echoed back from whatever resolved).
+- `lib/runtime/mock-runtime.ts` — `MockAgentRuntime` takes an injected `AgentRepository`
+  (default: the new shared singleton, see below) and resolves
+  `repository.getVersion(request.agentVersionId)` instead of `mock-data.ts`'s `agents`
+  array; falls back to the pre-Phase-2 "unknown" shape (echoing the instruction) when
+  unresolved, preserving every pre-Phase-2 test's behavior unchanged. Response text is
+  now `` `${instructions.Identity} ${instruction}` `` — deterministic, and demonstrably
+  dependent on the resolved version, not a pure echo. `createMockRuntime` gains an
+  `{ agentRepository? }` option.
+- `lib/agent-repository.ts` — new `getDefaultAgentRepository()`, a lazily-constructed
+  shared singleton (mirrors the `nextRunId`/`nextSessionId` module-counter pattern
+  already in this codebase) so callers that don't inject a repository still share
+  consistent state.
+- `lib/workflow-executors.ts` — `ExecutionInput` gains `agentVersionId?: string`,
+  threaded in by `consultWorkflow` (not looked up by the executor itself); the `agent`
+  executor forwards it into `AgentRequest`.
+- `lib/workflow-consultation.ts` — `ConsultWorkflowInput` gains
+  `pinnedAgentVersions?: Record<string, string>` (agentId → versionId; defaults to `{}`
+  for callers that don't opt in, e.g. `workflow-consultation.test.ts`'s direct calls).
+  Reused for both the pre-emitted `agent.started` and the executor's `agentVersionId`.
+- `lib/conversation-runtime.ts` — `runConversationSession` is where resolution actually
+  happens: `collectAgentIds` scans every node whose `ref.type === 'agent'` (mirroring
+  `consultWorkflow`'s own existing gating condition exactly, not `Workflow.agentIds`,
+  which can drift from real node refs); `resolveRunProvenance` resolves each one's
+  `getPublishedVersion` and **throws** (before any event is recorded) if any agent
+  doesn't exist or was never published — Phase 2 requirement 6's "fails explicitly."
+  `MockConversationRuntime`'s constructor gains an optional `pinnedAgentVersions` param
+  (default `{}`, so every pre-Phase-2 test constructing it directly is unaffected).
+  `runConversationSession` gains an optional `agentRepository` param (default: the
+  shared singleton).
+- `lib/workflow-execution.ts` — `simulateWorkflowRun` gains an optional
+  `agentRepository` param, threaded straight through.
+- `lib/mock-data.ts`, `lib/runtime/mock-runtime.ts` — stale header comments corrected
+  (they described `AgentRuntime` as reading `mock-data.ts`'s `Agent`, no longer true).
+- `lib/conversation-runtime.test.ts` — 9 new tests (see §10); the one pre-existing test
+  that calls `runConversationSession` directly (`agentWorkflow`'s `'test-agent'` id
+  isn't a real, resolvable agent) now injects a repository with a real published agent,
+  since that's the only path Phase 2 actually changed the resolution behavior of —
+  every `MockConversationRuntime`-constructed-directly test (cancellation, causality,
+  outcome truthfulness) is untouched and still passes unmodified.
+
+**Explicitly not done in Phase 2** (Phase 3's job): no screen reads
+`AgentRepository`/`AgentVersion` yet — `agent-testing-panel.tsx` is untouched and still
+displays from `mock-data.ts`'s `agents`, though the sessions it drives now transparently
+get real resolved provenance underneath since it already calls the now-upgraded
+`createMockRuntime()`/`runConversationSession()` with no repository override (both
+default to the same shared singleton). `Workflow.agentIds` is still the vehicle for
+"which agent(s) does this workflow reference" — not inverted, per Phase 1's own
+boundary, still correct in Phase 2.
 
 ## 1. Every current Agent representation
 
@@ -336,13 +398,13 @@ Tests: migration produces 4 agents with deterministic ids/versionIds/versionNumb
 version and never overwrites the prior one; `listVersions` returns full history;
 `getPublishedVersion` returns the latest published, not the draft.
 
-**Phase 2 — Runtime provenance.**
-Extend `EventIdentity`, `AgentRequest`, `ExecutionRecorder`; update
-`workflow-executors.ts`'s `agent` executor and `MockAgentRuntime.respond()`.
-Tests: every event in a run carries `agentId`/`agentVersionId` when applicable; a
-version published mid-run doesn't change the pinned id already on that run's events;
-`MockAgentRuntime`'s response text visibly changes when a different version's
-`instructions.Identity` is resolved (proves it's no longer a pure instruction-echo).
+**Phase 2 — Runtime provenance. Landed** — see the "Phase 2, as implemented" note near
+the top of this document for the exact files and the resolution point
+(`runConversationSession`, not `consultWorkflow` itself — the engine stays a pure
+consumer of an already-resolved `pinnedAgentVersions` map). All the tests this section
+named exist in `lib/conversation-runtime.test.ts`, plus explicit-failure coverage for a
+missing agent/version that this section didn't originally call out but Phase 2
+requirement 6 (the follow-up task that executed this phase) did.
 
 **Phase 3 — Screen wiring.**
 `structured-editor.tsx`, `agent-prompt-studio.tsx` (+ its route prop gap — see §11),
@@ -387,22 +449,21 @@ simple grep-based test) asserting no file imports `Agent`/`agents` from
 3. **Knowledge source ids don't exist yet.** Minting them (`lib/mock-data.ts`'s
    `sources`) is a small, additive, low-risk change, but it's technically outside
    "the Agent model" narrowly read — flagging so it isn't a surprise scope addition.
-4. **Multi-agent workflow runs' provenance is ambiguous.** A `Workflow` can reference
-   multiple agents across different `agent` nodes (e.g. a future escalation flow).
-   "The run's agentId," singular, isn't always well-defined at the run/session level.
-   Recommend: `EventIdentity.agentId`/`agentVersionId` are populated **per-event**
-   (on `agent.started`/`agent.responded` and anything else naturally scoped to one
-   node), and are additionally set at the **run-level** (`ExecutionRecorder`
-   construction) only when a run has exactly one distinct agent across the whole
-   walk — otherwise left undefined at that level rather than guessing which agent is
-   "primary." `AgentTestingPanel` sessions always satisfy the single-agent case by
-   construction.
-5. **`AgentRequest` is a "stable" contract.** `ARCHITECTURE.md` documents the four
-   runtime interfaces as the provider boundary real integrations will implement.
-   Adding `agentVersionId` is additive (a new required field on a request object, not
-   a signature change to the interface's shape or async nature) but is still a
-   deliberate touch to a boundary this project has otherwise protected carefully —
-   worth being explicit that it's happening and why, not silently done.
+4. **Multi-agent workflow runs' provenance is ambiguous. Resolved exactly as
+   recommended, in Phase 2.** `EventIdentity.agentId`/`agentVersionId` are populated
+   per-event (on `agent.started`/`agent.responded`'s own payload fields) and
+   additionally set at the run level (`ExecutionRecorder.setProvenance`, called from
+   `runConversationSession`) only when `collectAgentIds` finds exactly one distinct
+   agent across the workflow's nodes — otherwise left undefined at that level. No
+   current fixture workflow is multi-agent, so this path is exercised by construction
+   (every real session today is single-agent) but not by a dedicated multi-agent test —
+   flagging that as the one piece of this recommendation not directly covered.
+5. **`AgentRequest` is a "stable" contract. Done, in Phase 2** — `agentVersionId:
+   string` added to both `AgentRequest` and `AgentResult`. Confirmed additive: no
+   interface's shape or async nature changed, only a new required field on the request/
+   result data objects. `'unknown'` is the sentinel for "not resolved," matching the
+   existing `promptVersion`/`model`/`voice` fallback pattern rather than inventing a
+   new one.
 6. **Orphaned localStorage keys.** Removing `agent-builder-store.ts` leaves any
    existing `relay-agent-builder-${agentId}` browser keys unread and unreachable.
    Harmless (mock data, no user-facing consequence), not worth writing cleanup code

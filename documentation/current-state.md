@@ -16,16 +16,22 @@ against typed fixtures and a mock runtime.
   responsive layout. Routes: dashboard, agents (list / detail / new), prompt studio,
   knowledge, tools (list / detail), workflows (list / detail), analytics, calls
   (list / detail), plus placeholder sections.
-- **Agents** — agent model with `promptVersion` + `model` fields, list and detail
-  workspaces, prompt studio, structured editor, and validation. The testing panel now
-  drives a real test consultation through the Conversation Runtime (see below) rather
-  than a local fake chat. The target Agent data model — currently fragmented across
-  several disconnected surfaces in the actual code — has an approved design record at
-  `agent-model-design.md`, including an approved Agent Versioning decision (§9): a
-  stable Agent owning one editable draft plus immutable published versions. Phase 1 of
-  its implementation plan has landed — `lib/agent-model.ts`, `lib/agent-repository.ts`,
-  `lib/agent-migration.ts` — but nothing reads it yet; every screen and the execution
-  engine still use the old `mock-data.ts` fixture until Phases 2–3 land.
+- **Agents** — screens (list, detail, prompt studio, structured editor, validation)
+  still display from the legacy `promptVersion` + `model` fixture (`mock-data.ts`) —
+  that's still Phase 3, not done. The **execution path is no longer one of those
+  screens**, though: `agent-model-design.md` §9 records the approved Agent Versioning
+  decision (a stable Agent owning one editable draft plus immutable published
+  versions), Phase 1 of its implementation plan built the repository
+  (`lib/agent-model.ts`, `lib/agent-repository.ts`, `lib/agent-migration.ts`), and
+  **Phase 2 wired the engine onto it**: `runConversationSession` resolves and pins one
+  published `AgentVersion` per agent a workflow references before a session starts,
+  `MockAgentRuntime` resolves through that pinned snapshot instead of the fixture, and
+  every event on the run carries immutable `workflowId`/`workflowVersion`/`agentId`/
+  `agentVersionId` provenance unaffected by a version published mid-session. The
+  testing panel drives a real test consultation through the Conversation Runtime (see
+  below) rather than a local fake chat — and, as an unplanned side effect of Phase 2
+  touching the shared runtime it already calls, that consultation is now also
+  provenance-pinned, even though the panel's own display still reads the old fixture.
 - **Tools** — registry with typed inputs *and* outputs and a deterministic mock result
   per tool; list and detail views.
 - **Knowledge** — knowledge-source concepts and listing (retrieval is served through

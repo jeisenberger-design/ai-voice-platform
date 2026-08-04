@@ -259,17 +259,34 @@ network-bound, and defining these synchronously today would force a rewrite of t
 engine and UI the moment a real provider shows up. That's the whole point of the
 boundary.
 
-`lib/runtime/mock-runtime.ts` implements all four deterministically and is **the only
-place in the execution path that reads fixture data** (`mock-data.ts`, `mock-tools.ts`,
-`mock-data.ts`'s `sources`). Swapping a mock for a real provider means replacing one of
-these four classes — nothing upstream changes.
+`lib/runtime/mock-runtime.ts` implements all four deterministically. `Tool`/`Knowledge`/
+`Channel` read fixture data directly (`mock-tools.ts`, `mock-data.ts`'s `sources`) — the
+only place in the execution path that does. **`Agent` no longer does, as of Phase 2**
+(below): `MockAgentRuntime` resolves through `AgentRepository` instead. Swapping a mock
+for a real provider still means replacing one of these four classes — nothing upstream
+changes.
 
-`Agent` (`lib/mock-data.ts`) carries `promptVersion` + `model` — the minimum
-`AgentRuntime` needs to resolve a runnable configuration. Deliberately **not** added
-yet: guardrails (needs an enforcement point in the engine first, not just a field),
-tool/knowledge bindings (workflows already bind these per-node; agent-level bindings
-would create a second source of truth until agent-initiated tool use exists), output
-schema (only meaningful once agents produce structured results).
+**Runtime provenance and version pinning (Phase 2 of
+`documentation/agent-model-implementation-plan.md`)** — `AgentRequest`/`AgentResult`
+gained `agentVersionId`; `MockAgentRuntime` resolves the pinned `AgentVersion` snapshot
+via `AgentRepository.getVersion(agentVersionId)` (never a fresh agentId lookup, never
+the live draft), and its response text now visibly depends on the resolved version's
+`instructions.Identity` rather than purely echoing the workflow node's instruction.
+`runConversationSession` (`lib/conversation-runtime.ts`) resolves one immutable
+`AgentVersion` per distinct agent the workflow's nodes reference — once, before
+`session.opened`/`run.started` are even emitted, via
+`AgentRepository.getPublishedVersion` — and fails explicitly (rejects, before any event
+is recorded) if an agent doesn't exist or was never published. That resolution is
+pinned: `ExecutionRecorder.setProvenance` stamps every subsequent event's
+`workflowId`/`workflowVersion` (always) and `agentId`/`agentVersionId` (when the
+workflow references exactly one distinct agent) onto `EventIdentity`, and throws if
+called after the first event — publishing a new version mid-session can never
+retroactively change what's already on the stream. `agent.started`/`agent.responded`
+additionally carry their own per-node `agentId`/`agentVersionId` on the event payload,
+so a (currently hypothetical) multi-agent workflow still gets correct per-node
+provenance even without a single run-level default. `Agent`'s ten legacy fixture fields
+(`lib/mock-data.ts`) are **not** what `AgentRuntime` resolves through anymore; that
+fixture remains read by UI screens only, not yet migrated (Phase 3).
 
 ## Presentation
 
@@ -383,9 +400,15 @@ and what's not built yet.
   version and never mutates a prior one), and a pure, deterministic migration seeding
   the 4 fixture agents into that shape (`lib/agent-model.ts`, `lib/agent-repository.ts`,
   `lib/agent-migration.ts`). The Agent Versioning decision this implements is now
-  recorded in `agent-model-design.md` §9. Not yet consumed by anything — the execution
-  engine and every UI screen still read the old `mock-data.ts` fixture; that's Phases 2
-  and 3.
+  recorded in `agent-model-design.md` §9.
+- **Agent Model (runtime provenance)** — Phase 2 of
+  `documentation/agent-model-implementation-plan.md`: the execution engine now actually
+  reads the Phase 1 repository. `runConversationSession` resolves and pins one
+  published `AgentVersion` per agent the workflow references, once, before a session
+  starts; `MockAgentRuntime` resolves through it (see "Runtime Interfaces" above); every
+  event on the run carries immutable `workflowId`/`workflowVersion`/`agentId`/
+  `agentVersionId` provenance, unaffected by a version published mid-session. UI screens
+  still read the old `mock-data.ts` fixture for display — that's Phase 3.
 
 ## Known architectural debt
 

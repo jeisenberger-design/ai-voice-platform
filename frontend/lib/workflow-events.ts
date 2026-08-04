@@ -90,6 +90,30 @@ export type EventIdentity = {
    * time; `canonical` events are the durable record.
    */
   durability: 'canonical' | 'ephemeral';
+  /**
+   * Runtime provenance (documentation/agent-model-implementation-plan.md Phase 2).
+   * Stamped once by `ExecutionRecorder.setProvenance` before the first event of a run
+   * is emitted — same treatment `sessionId`/`runId` already get — so every event
+   * carries it unchanged for the run's lifetime regardless of what publishes later.
+   * `workflowId`/`workflowVersion` are always present (a run always executes exactly
+   * one workflow definition snapshot). `agentId`/`agentVersionId` are present only when
+   * the workflow references exactly one distinct agent — see `RunProvenance` below;
+   * a run spanning multiple agents leaves these undefined at the identity level rather
+   * than guessing which agent is "primary," though `agent.started`/`agent.responded`
+   * still carry their own per-node `agentId`/`agentVersionId` on the event payload.
+   */
+  workflowId?: string;
+  workflowVersion?: number;
+  agentId?: string;
+  agentVersionId?: string;
+};
+
+/** What `ExecutionRecorder.setProvenance` pins for the run — see `EventIdentity` above. */
+export type RunProvenance = {
+  workflowId: string;
+  workflowVersion: number;
+  agentId?: string;
+  agentVersionId?: string;
 };
 
 export type ExecutionEventPayload =
@@ -126,10 +150,14 @@ export type ExecutionEventPayload =
   | { type: 'conversation.turn'; speaker: TranscriptLine['speaker']; text: string }
   | { type: 'edge.traversed'; edgeId: string; sourceId: string; targetId: string; label?: string }
   | { type: 'channel.opened'; channelSessionId: string; channel: string; provider: string }
-  | { type: 'agent.started'; agentId: string; instruction: string }
+  // agentVersionId is 'unknown' when the caller didn't opt into version pinning (see
+  // ConsultWorkflowInput.pinnedAgentVersions) — the same sentinel AgentResult already
+  // used for promptVersion/model/voice when an agent id doesn't resolve.
+  | { type: 'agent.started'; agentId: string; agentVersionId: string; instruction: string }
   | {
       type: 'agent.responded';
       agentId: string;
+      agentVersionId: string;
       promptVersion: string;
       model: string;
       voice: string;
@@ -211,11 +239,29 @@ export class ExecutionRecorder {
   private readonly events: ExecutionEvent[] = [];
   private seq = 0;
   private clock = 0;
+  private provenance: RunProvenance | undefined;
 
   constructor(
     readonly runId: string,
     readonly sessionId: string,
   ) {}
+
+  /**
+   * Pins run-level provenance so every subsequently emitted event carries it — see
+   * `RunProvenance`. Must be called, if at all, before the first `emit()`; resolution
+   * happens once at session start (see `runConversationSession`), never mid-run, so a
+   * version published later can never retroactively appear on an already-recorded
+   * event. Throws if called after emission has already started, rather than silently
+   * leaving earlier events unstamped.
+   */
+  setProvenance(provenance: RunProvenance): void {
+    if (this.events.length > 0) {
+      throw new Error(
+        'ExecutionRecorder.setProvenance must be called before the first emit() — provenance is captured once, at session start, never substituted mid-run.',
+      );
+    }
+    this.provenance = provenance;
+  }
 
   emit(payload: ExecutionEventPayload, options: EmitOptions = {}): ExecutionEvent {
     const seq = this.seq;
@@ -234,6 +280,13 @@ export class ExecutionRecorder {
       t: this.clock,
       emittedAt: Date.now(),
       durability: options.durability ?? 'canonical',
+      workflowId: this.provenance?.workflowId,
+      workflowVersion: this.provenance?.workflowVersion,
+      agentId: this.provenance?.agentId,
+      agentVersionId: this.provenance?.agentVersionId,
+      // Payload spreads last: event types that carry their own per-node agentId/
+      // agentVersionId (agent.started, agent.responded) override the run-level default
+      // above with the precise value for that node — see EventIdentity's doc comment.
       ...payload,
     };
     this.clock += BASE_TICK + (options.latency ?? 0);

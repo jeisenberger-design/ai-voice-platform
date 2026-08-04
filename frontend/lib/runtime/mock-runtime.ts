@@ -1,14 +1,18 @@
 // Deterministic mock runtime implementations.
 //
-// These are the only place in the execution path that reads fixtures. They satisfy the
-// contracts in ./contracts.ts so the engine never depends on where data comes from —
-// swapping in a real provider means replacing these classes, nothing else.
+// These satisfy the contracts in ./contracts.ts so the engine never depends on where
+// data comes from — swapping in a real provider means replacing these classes, nothing
+// else. Tool/Knowledge/Channel still read fixtures (mock-tools.ts, mock-data.ts's
+// sources) directly — the only place in the execution path that does. Agent no longer
+// does: as of Phase 2 (documentation/agent-model-implementation-plan.md),
+// MockAgentRuntime resolves through AgentRepository (lib/agent-repository.ts) instead.
 //
 // Everything here is deterministic: same request in, same result out, so simulated runs
 // and their event streams stay reproducible.
 
-import { agents, sources } from '@/lib/mock-data';
+import { sources } from '@/lib/mock-data';
 import { tools } from '@/lib/mock-tools';
+import { getDefaultAgentRepository, type AgentRepository } from '@/lib/agent-repository';
 import type {
   AgentRequest,
   AgentResult,
@@ -32,11 +36,21 @@ const KNOWLEDGE_LATENCY_MS = 90;
 export class MockAgentRuntime implements AgentRuntime {
   readonly provider = 'mock-agent';
 
+  constructor(private readonly repository: AgentRepository = getDefaultAgentRepository()) {}
+
   async respond(request: AgentRequest): Promise<AgentResult> {
-    const agent = agents.find((entry) => entry.id === request.agentId);
-    if (!agent) {
+    // Resolves the pinned AgentVersion snapshot by id — never the live draft, never a
+    // fresh lookup by agentId — so this always reflects exactly what
+    // runConversationSession resolved at session start (see
+    // documentation/agent-model-implementation-plan.md Phase 2).
+    const version =
+      request.agentVersionId !== 'unknown'
+        ? await this.repository.getVersion(request.agentVersionId)
+        : null;
+    if (!version) {
       return {
         agentId: request.agentId,
+        agentVersionId: request.agentVersionId,
         promptVersion: 'unknown',
         model: 'unknown',
         voice: 'unknown',
@@ -45,12 +59,16 @@ export class MockAgentRuntime implements AgentRuntime {
       };
     }
     return {
-      agentId: agent.id,
-      promptVersion: agent.promptVersion,
-      model: agent.model,
-      voice: agent.voice,
-      // Mock responses echo the node's instruction; a real runtime returns generated text.
-      text: request.instruction,
+      agentId: request.agentId,
+      agentVersionId: version.versionId,
+      promptVersion: version.legacyLabel ?? `v${version.versionNumber}`,
+      model: version.model,
+      voice: version.voice,
+      // Deterministic and visibly dependent on the resolved AgentVersion's own fields —
+      // no longer a pure echo of the workflow node's instruction (Phase 2 requirement
+      // 5). A real provider would generate free text from this config; this stays fully
+      // mocked but proves the dependency by construction.
+      text: `${version.instructions.Identity} ${request.instruction}`.trim(),
       latencyMs: AGENT_LATENCY_MS,
     };
   }
@@ -121,9 +139,11 @@ export class MockChannelRuntime implements ChannelRuntime {
   }
 }
 
-export function createMockRuntime(): PlatformRuntime {
+export function createMockRuntime(
+  options: { agentRepository?: AgentRepository } = {},
+): PlatformRuntime {
   return {
-    agent: new MockAgentRuntime(),
+    agent: new MockAgentRuntime(options.agentRepository),
     tool: new MockToolRuntime(),
     knowledge: new MockKnowledgeRuntime(),
     channel: new MockChannelRuntime(),

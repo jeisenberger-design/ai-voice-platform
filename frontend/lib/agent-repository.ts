@@ -225,3 +225,15 @@ export class LocalAgentRepository implements AgentRepository {
     return agent;
   }
 }
+
+// Shared, lazily-constructed singleton — so callers that don't inject their own
+// repository (real app usage, not tests) all resolve against the same localStorage-
+// backed state, the same way nextRunId/nextSessionId are shared module-level counters
+// elsewhere in this codebase. Tests should always inject their own instance (with an
+// explicit storage/clock) rather than relying on this singleton, to stay isolated from
+// each other.
+let defaultRepository: AgentRepository | undefined;
+export function getDefaultAgentRepository(): AgentRepository {
+  if (!defaultRepository) defaultRepository = new LocalAgentRepository();
+  return defaultRepository;
+}

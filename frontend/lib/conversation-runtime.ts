@@ -32,11 +32,12 @@ import {
   type WorkflowContext,
 } from '@/lib/workflow-context';
 import type { Cursor, Directive, SessionEndReason, Stimulus } from '@/lib/conversation-types';
-import { ExecutionRecorder } from '@/lib/workflow-events';
+import { ExecutionRecorder, type RunProvenance } from '@/lib/workflow-events';
 import { consultWorkflow, type ConsultationResult } from '@/lib/workflow-consultation';
 import { projectContext } from '@/lib/workflow-projections';
 import type { PlatformRuntime } from '@/lib/runtime/contracts';
 import { getScenario, scenarioTurn, type ScriptedTurn } from '@/lib/conversation-scenarios';
+import { getDefaultAgentRepository, type AgentRepository } from '@/lib/agent-repository';
 
 // Defensive guard against a mis-modeled graph running forever in the absence of a real
 // caller to break the cycle. Exported so tests can drive exhaustion deterministically
@@ -149,6 +150,12 @@ export class MockConversationRuntime {
     private readonly recorder: ExecutionRecorder,
     private readonly runId: string,
     private readonly stimulusSource: StimulusSource = scriptedStimulusSource(workflow.id),
+    // agentId -> pinned AgentVersion id, resolved once at session start (see
+    // resolveRunProvenance/runConversationSession below) and reused for every
+    // consultation this session drives. Defaults to {} for callers that construct this
+    // class directly, bypassing runConversationSession (e.g. tests exercising
+    // consultation/cancellation/causality mechanics, predating the Agent Model).
+    private readonly pinnedAgentVersions: Record<string, string> = {},
   ) {}
 
   /**
@@ -203,6 +210,7 @@ export class MockConversationRuntime {
           runId: this.runId,
           consultationId,
           causeEventId,
+          pinnedAgentVersions: this.pinnedAgentVersions,
         });
         context = result.context;
 
@@ -341,6 +349,57 @@ export class MockConversationRuntime {
   }
 }
 
+// Every node whose ref names an agent — mirrors exactly the gating condition
+// consultWorkflow already uses to decide whether to pre-emit agent.started (ref.type,
+// not node.kind, matching that file's own miniature-duplication comment) — so this
+// pre-resolves precisely the set of agent ids a real walk could ever hit.
+function collectAgentIds(workflow: Workflow): string[] {
+  const ids = new Set<string>();
+  for (const node of workflow.nodes) {
+    if (node.ref?.type === 'agent') ids.add(node.ref.id);
+  }
+  return [...ids];
+}
+
+/**
+ * Resolves a specific, immutable AgentVersion for every agent the workflow's nodes
+ * reference — once, before the session starts (Phase 2 requirement 1). Throws
+ * explicitly rather than falling back to a stale or synthetic snapshot when an agent
+ * doesn't exist or has never been published (Phase 2 requirement 6): a session that
+ * can't resolve real provenance must fail loudly at setup, not silently misreport it
+ * later as a truthful-looking but misleading runtime error.
+ *
+ * `agentId`/`agentVersionId` are set on the returned `RunProvenance` only when the
+ * workflow references exactly one distinct agent — see EventIdentity's doc comment in
+ * workflow-events.ts and agent-model-implementation-plan.md §11 risk 4. The full
+ * per-agent map is always returned regardless, so multi-agent workflows still get a
+ * correctly pinned version per node (via agent.started/agent.responded's own payload
+ * fields), just no single run-level default.
+ */
+async function resolveRunProvenance(
+  workflow: Workflow,
+  agentRepository: AgentRepository,
+): Promise<{ pinnedAgentVersions: Record<string, string>; provenance: RunProvenance }> {
+  const agentIds = collectAgentIds(workflow);
+  const pinnedAgentVersions: Record<string, string> = {};
+  for (const agentId of agentIds) {
+    const version = await agentRepository.getPublishedVersion(agentId);
+    if (!version) {
+      throw new Error(
+        `Cannot start a session for workflow "${workflow.id}": agent "${agentId}" has no published AgentVersion. Publish the agent before running or testing this workflow.`,
+      );
+    }
+    pinnedAgentVersions[agentId] = version.versionId;
+  }
+
+  const provenance: RunProvenance = { workflowId: workflow.id, workflowVersion: workflow.version };
+  if (agentIds.length === 1) {
+    provenance.agentId = agentIds[0];
+    provenance.agentVersionId = pinnedAgentVersions[agentIds[0]];
+  }
+  return { pinnedAgentVersions, provenance };
+}
+
 /**
  * The canonical run envelope: run.started → session lifecycle (driven by
  * MockConversationRuntime) → runtime.completed → run.completed. This is the single
@@ -348,6 +407,9 @@ export class MockConversationRuntime {
  * ending it reaches) — `simulateWorkflowRun` (the "Run test" button) and the agent
  * testing panel both call this rather than each assembling the envelope by hand, so
  * an interactive agent test produces the identical lifecycle shape a workflow run does.
+ *
+ * Also where Phase 2's runtime provenance is resolved (see resolveRunProvenance above)
+ * — before `recorder` emits anything, so run.started itself already carries it.
  */
 export async function runConversationSession(input: {
   workflow: Workflow;
@@ -356,8 +418,14 @@ export async function runConversationSession(input: {
   runId: string;
   stimulusSource?: StimulusSource;
   onPause?: (recorder: ExecutionRecorder) => void;
+  /** Defaults to the shared local repository singleton — see getDefaultAgentRepository. */
+  agentRepository?: AgentRepository;
 }): Promise<{ context: WorkflowContext; endReason: SessionEndReason }> {
   const { workflow, runtime, recorder, runId, stimulusSource, onPause } = input;
+  const agentRepository = input.agentRepository ?? getDefaultAgentRepository();
+
+  const { pinnedAgentVersions, provenance } = await resolveRunProvenance(workflow, agentRepository);
+  recorder.setProvenance(provenance);
 
   const initial = createInitialContext(workflow.variables);
   const runStarted = recorder.emit({
@@ -376,6 +444,7 @@ export async function runConversationSession(input: {
     recorder,
     runId,
     stimulusSource,
+    pinnedAgentVersions,
   );
   const { endReason } = await conversationRuntime.run(initial, runStarted.eventId, onPause);
 

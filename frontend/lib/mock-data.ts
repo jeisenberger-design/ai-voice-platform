@@ -1,6 +1,8 @@
-// `promptVersion` and `model` are the minimum an AgentRuntime needs to resolve a
-// runnable agent configuration. Guardrails, tool/knowledge bindings and output schema
-// are deliberately still absent — see documentation notes before adding them.
+// As of Phase 2 (documentation/agent-model-implementation-plan.md), MockAgentRuntime no
+// longer resolves through this fixture at all — it resolves the canonical AgentVersion
+// (lib/agent-model.ts) via AgentRepository. This type/array remain read by UI screens
+// only (agents list/detail, agent testing panel's display fields); migrating those onto
+// the repository is Phase 3, not yet done.
 export type Agent = {
   id: string;
   name: string;

@@ -72,6 +72,14 @@ export type ConsultWorkflowInput = {
   consultationId: string;
   /** The event that caused this consultation: run.started, or the prior consultation's pause. */
   causeEventId: string;
+  /**
+   * agentId -> pinned AgentVersion id, resolved once at session start (see
+   * runConversationSession) and unchanged for the run's lifetime. Defaults to `{}` for
+   * callers that don't use version pinning (e.g. tests exercising consultation
+   * mechanics directly, predating the Agent Model) — those nodes get the 'unknown'
+   * sentinel, exactly like today's unresolved-agent fallback.
+   */
+  pinnedAgentVersions?: Record<string, string>;
 };
 
 const SCOPES: ContextScope[] = ['variables', 'session', 'metadata'];
@@ -136,8 +144,17 @@ function stimulusDetail(stimulus: Stimulus): string | undefined {
 }
 
 export async function consultWorkflow(input: ConsultWorkflowInput): Promise<ConsultationResult> {
-  const { workflow, stimulus, cursor, runtime, recorder, runId, consultationId, causeEventId } =
-    input;
+  const {
+    workflow,
+    stimulus,
+    cursor,
+    runtime,
+    recorder,
+    runId,
+    consultationId,
+    causeEventId,
+    pinnedAgentVersions = {},
+  } = input;
   const nodesById = new Map<string, WorkflowNode>(workflow.nodes.map((node) => [node.id, node]));
   const startIndex = recorder.list().length;
 
@@ -225,8 +242,17 @@ export async function consultWorkflow(input: ConsultWorkflowInput): Promise<Cons
     // duplicated here in miniature — see workflow-executors.ts for the executors that
     // must keep matching them.
     const agentId = current.ref?.type === 'agent' ? current.ref.id : undefined;
+    const agentVersionId = agentId ? (pinnedAgentVersions[agentId] ?? 'unknown') : undefined;
     if (agentId) {
-      recorder.emit({ type: 'agent.started', agentId, instruction: current.label }, stepOptions);
+      recorder.emit(
+        {
+          type: 'agent.started',
+          agentId,
+          agentVersionId: agentVersionId ?? 'unknown',
+          instruction: current.label,
+        },
+        stepOptions,
+      );
     }
     const toolId = current.ref?.type === 'tool' ? current.ref.id : undefined;
     if (toolId) {
@@ -250,6 +276,7 @@ export async function consultWorkflow(input: ConsultWorkflowInput): Promise<Cons
       runtime,
       meta: { runId, nodeId: current.id, stepId },
       workflowId: workflow.id,
+      agentVersionId,
     });
     context = result.context;
 
@@ -269,6 +296,7 @@ export async function consultWorkflow(input: ConsultWorkflowInput): Promise<Cons
         {
           type: 'agent.responded',
           agentId: result.agent.agentId,
+          agentVersionId: result.agent.agentVersionId,
           promptVersion: result.agent.promptVersion,
           model: result.agent.model,
           voice: result.agent.voice,
