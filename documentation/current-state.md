@@ -37,16 +37,25 @@ against typed fixtures and a mock runtime.
   transfers, memory, guardrails, output schema — now read/write that canonical draft
   through an explicit Save/Discard flow (edits stage locally; "Save changes" commits
   the whole patch in one call; a published version is never mutated by editing).
-  **Still pending, explicitly not touched by Phase 3A**: Prompt Studio
-  (`agent-prompt-studio.tsx`, the standalone `/prompt-studio` route), the Knowledge and
-  Tools *top-level* tabs, and — deliberately, within the Configuration tab itself —
-  the Knowledge/Tools *sections*, which still read/write `stores/agent-builder-store.ts`
-  (kept as a documented compatibility adapter, not deleted). List/detail screens no
+  **Phase 3B completed the canonical configuration path**: Prompt Studio
+  (`agent-prompt-studio.tsx`) now takes an explicit `agentId` and edits the same draft
+  as Configuration, with the same explicit-save staging plus real publish (validated,
+  failure creates no version) and version-history/rollback wired to
+  `AgentRepository`; the standalone `/prompt-studio` route is an Agent-selection
+  launcher that never defaults to an implicit agent and holds no prompt state of its
+  own. Structured Editor's Knowledge/Tools sections joined the other 7 on the
+  canonical draft, and `stores/agent-builder-store.ts` — the compatibility adapter
+  Phase 3A narrowed but kept — is deleted outright. The top-level Knowledge/Tools tabs
+  now read/write `Agent.knowledgeSourceIds`/`toolIds` by stable id (never by name), and
+  the Versions tab shows real published-version history instead of hardcoded rows.
+  `AgentTestingPanel` explicitly resolves and gates on the agent's published
+  `AgentVersion` before allowing a test to start, with an honest empty state when none
+  exists yet — the runtime's own Phase 2 pinning is unchanged. List/detail screens no
   longer show call counts, success rate, or last-updated for repository-sourced
   agents — the canonical `Agent` type has no such fields yet; that's the future Calls/
   Analytics projection, not invented here. `lib/mock-data.ts`'s legacy `agents` fixture
   is untouched and still read directly by `workflow-detail.tsx`, `tool-detail.tsx`, and
-  the dashboard page.
+  the dashboard page — outside the Agent Model plan's scope.
 - **Tools** — registry with typed inputs *and* outputs and a deterministic mock result
   per tool; list and detail views.
 - **Knowledge** — knowledge-source concepts and listing (retrieval is served through

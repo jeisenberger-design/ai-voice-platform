@@ -1,18 +1,35 @@
 'use client';
-import { useState } from 'react';
+// Edits the canonical Agent draft (lib/agent-model.ts) for exactly one, explicitly
+// supplied agentId — see documentation/agent-model-implementation-plan.md Phase 3B.
+// Prompt/instructions have no independent source of truth here: everything below reads
+// through useAgentDraft/useAgentVersions and writes through useUpdateAgentDraft/
+// usePublishAgent/useRollbackToVersion, the same repository every other Agent
+// configuration surface uses (structured-editor.tsx, agent-detail-workspace.tsx).
+import { useMemo, useState } from 'react';
 import {
   Check,
-  Clock3,
   Copy,
   GitCompareArrows,
   History,
   RotateCcw,
+  Save,
   Send,
   SplitSquareHorizontal,
 } from 'lucide-react';
 import { Badge, Button, Card } from '@/components/ui';
+import { AgentValidationSummary } from '@/components/agent-validation-summary';
+import { validateAgentConfig } from '@/lib/agent-validation';
+import {
+  useAgentDraft,
+  useAgentVersions,
+  usePublishAgent,
+  useRollbackToVersion,
+  useUpdateAgentDraft,
+} from '@/hooks/use-agent-data';
+import type { InstructionSection } from '@/lib/agent-model';
 import { cn } from '@/lib/utils';
-const sections = [
+
+const promptStudioSections = [
   'Identity',
   'Greeting',
   'Conversation Rules',
@@ -21,46 +38,107 @@ const sections = [
   'Transfer Rules',
   'Data Collection',
   'Output Schema',
-];
-const versions = [
-  {
-    id: 14,
-    label: 'v14',
-    status: 'Draft',
-    time: 'Edited just now',
-    note: 'Added guardrail for sensitive information.',
-  },
-  {
-    id: 13,
-    label: 'v13',
-    status: 'Published',
-    time: 'Jul 14, 2026',
-    note: 'Refined discovery and qualification flow.',
-  },
-  {
-    id: 12,
-    label: 'v12',
-    status: 'Published',
-    time: 'Jul 8, 2026',
-    note: 'Initial sales qualification baseline.',
-  },
-];
-export function AgentPromptStudio() {
-  const [active, setActive] = useState(sections[0]),
-    [selected, setSelected] = useState(14),
-    [compare, setCompare] = useState(false),
-    [published, setPublished] = useState(false);
-  const version = versions.find((item) => item.id === selected)!;
+] as const;
+type PromptStudioSection = (typeof promptStudioSections)[number];
+
+// Maps this studio's 8-section authoring vocabulary onto the canonical 14
+// InstructionSections — the mapping documentation/agent-model-implementation-plan.md
+// §11 risk 2 already proposed, not invented here. "Greeting" folds into "Identity"
+// (opening behavior is part of identity); two Studio sections sharing one canonical
+// field is a known, documented simplification, not an oversight.
+const SECTION_MAP: Record<PromptStudioSection, InstructionSection> = {
+  Identity: 'Identity',
+  Greeting: 'Identity',
+  'Conversation Rules': 'Conversation Rules',
+  'Knowledge Instructions': 'Knowledge',
+  'Emergency Rules': 'Guardrails',
+  'Transfer Rules': 'Transfers',
+  'Data Collection': 'Output Format',
+  'Output Schema': 'Output Schema',
+};
+
+export function AgentPromptStudio({ agentId }: { agentId: string }) {
+  const { data: draft } = useAgentDraft(agentId);
+  const { data: versions = [] } = useAgentVersions(agentId);
+  const updateDraft = useUpdateAgentDraft(agentId);
+  const publishAgent = usePublishAgent(agentId);
+  const rollback = useRollbackToVersion(agentId);
+
+  const [active, setActive] = useState<PromptStudioSection>(promptStudioSections[0]);
+  const [compare, setCompare] = useState(false);
+  // "draft" is the editable current draft; any other value is a published version's id,
+  // selected read-only from history below.
+  const [selectedVersionId, setSelectedVersionId] = useState<string>('draft');
+
+  // Explicit-save staging — identical semantics to agent-detail-workspace.tsx's
+  // `staged` (Phase 3A): edits accumulate here, untouched in the repository, until
+  // "Save changes" is clicked.
+  const [staged, setStaged] = useState<Partial<Record<InstructionSection, string>>>({});
+  const hasUnsavedChanges = Object.keys(staged).length > 0;
+  const mergedInstructions = useMemo(
+    () => (draft ? { ...draft.instructions, ...staged } : undefined),
+    [draft, staged],
+  );
+
+  if (!draft || !mergedInstructions) {
+    return (
+      <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">
+        Loading agent draft…
+      </div>
+    );
+  }
+
+  const canonicalSection = SECTION_MAP[active];
+  const latestPublished = versions[0]; // listVersions() returns newest first
+  const selectedVersion =
+    selectedVersionId === 'draft' ? null : versions.find((v) => v.versionId === selectedVersionId);
+  const viewingDraft = selectedVersion === null;
+
+  const setSectionValue = (value: string) =>
+    setStaged((current) => ({ ...current, [canonicalSection]: value }));
+  const save = async () => {
+    if (!hasUnsavedChanges) return;
+    await updateDraft.mutateAsync({ instructions: staged });
+    setStaged({});
+  };
+  const discard = () => setStaged({});
+
+  const hasErrors = validateAgentConfig(mergedInstructions).some(
+    (result) => result.severity === 'error',
+  );
+
+  const publish = async () => {
+    if (hasUnsavedChanges || hasErrors) return;
+    await publishAgent.mutateAsync();
+  };
+
+  const rollbackToSelected = async () => {
+    if (!selectedVersion) return;
+    if (
+      hasUnsavedChanges &&
+      !window.confirm('Rolling back will discard your unsaved staged edits. Continue?')
+    ) {
+      return;
+    }
+    setStaged({});
+    await rollback.mutateAsync(selectedVersion.versionId);
+    setSelectedVersionId('draft');
+  };
+
+  const displayedText = selectedVersion
+    ? selectedVersion.instructions[canonicalSection]
+    : mergedInstructions[canonicalSection];
+
   return (
     <div className="grid gap-6 xl:grid-cols-[220px_1fr_260px]">
       <aside className="rounded-lg border bg-card p-3">
         <div className="mb-3 flex items-center justify-between px-2">
           <span className="text-sm font-medium">Prompt sections</span>
-          <Button variant="ghost" className="h-7 px-1" aria-label="Duplicate prompt">
+          <Button variant="ghost" className="h-7 px-1" aria-label="Duplicate prompt" disabled>
             <Copy size={15} />
           </Button>
         </div>
-        {sections.map((section, index) => (
+        {promptStudioSections.map((section, index) => (
           <button
             onClick={() => setActive(section)}
             className={cn(
@@ -75,43 +153,107 @@ export function AgentPromptStudio() {
         ))}
       </aside>
       <div className="space-y-4">
+        {viewingDraft && <AgentValidationSummary instructions={mergedInstructions} />}
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="font-medium">{active}</h2>
-                <Badge variant={published ? 'success' : 'warning'}>
-                  {published ? 'Published' : 'Draft'}
+                <Badge
+                  variant={selectedVersion ? 'success' : hasUnsavedChanges ? 'warning' : 'neutral'}
+                >
+                  {selectedVersion
+                    ? `Published v${selectedVersion.versionNumber}`
+                    : hasUnsavedChanges
+                      ? 'Unsaved draft'
+                      : 'Draft'}
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Structured behavior block. Changes are tracked as a versioned draft.
+                Structured behavior block. Maps to the canonical{' '}
+                <span className="font-medium">{canonicalSection}</span> instruction section.
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setCompare(!compare)}>
+            <div className="flex flex-wrap gap-2">
+              {viewingDraft && hasUnsavedChanges && (
+                <Button variant="outline" onClick={discard}>
+                  Discard
+                </Button>
+              )}
+              {viewingDraft && (
+                <Button
+                  variant="outline"
+                  onClick={save}
+                  disabled={!hasUnsavedChanges || updateDraft.isPending}
+                >
+                  <Save size={16} className="mr-2" />
+                  Save changes
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setCompare((value) => !value)}>
                 <GitCompareArrows size={16} className="mr-2" />
                 {compare ? 'Close compare' : 'Compare'}
               </Button>
-              <Button onClick={() => setPublished(true)}>
-                <Send size={16} className="mr-2" />
-                Publish
-              </Button>
+              {viewingDraft && (
+                <Button
+                  onClick={publish}
+                  disabled={hasUnsavedChanges || hasErrors || publishAgent.isPending}
+                >
+                  <Send size={16} className="mr-2" />
+                  {publishAgent.isPending ? 'Publishing…' : 'Publish'}
+                </Button>
+              )}
             </div>
           </div>
           {compare ? (
-            <div className="grid divide-x md:grid-cols-2">
-              <PromptBlock title="v13 · Published" muted />
-              <PromptBlock title="v14 · Draft" />
-            </div>
+            latestPublished ? (
+              <div className="grid divide-x md:grid-cols-2">
+                <PromptBlock
+                  title={`v${latestPublished.versionNumber} · Published`}
+                  value={latestPublished.instructions[canonicalSection]}
+                  editable={false}
+                />
+                <PromptBlock
+                  title="Draft"
+                  value={mergedInstructions[canonicalSection]}
+                  editable
+                  onChange={setSectionValue}
+                />
+              </div>
+            ) : (
+              <div className="p-5 text-sm text-muted-foreground">
+                No published version yet — nothing to compare the draft against.
+              </div>
+            )
           ) : (
-            <PromptBlock title={`${version.label} · ${version.status}`} />
+            <PromptBlock
+              title={
+                selectedVersion
+                  ? `v${selectedVersion.versionNumber} · Published`
+                  : hasUnsavedChanges
+                    ? 'Draft · Unsaved'
+                    : 'Draft'
+              }
+              value={displayedText}
+              editable={viewingDraft}
+              onChange={viewingDraft ? setSectionValue : undefined}
+            />
+          )}
+          {viewingDraft && hasUnsavedChanges && (
+            <p className="border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+              Save your changes before publishing.
+            </p>
+          )}
+          {publishAgent.isError && (
+            <p className="border-t bg-red-500/5 px-4 py-2 text-xs text-red-600 dark:text-red-400">
+              {(publishAgent.error as Error).message}
+            </p>
           )}
         </Card>
-        {published && (
+        {publishAgent.isSuccess && viewingDraft && !hasUnsavedChanges && latestPublished && (
           <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-400">
             <Check size={16} />
-            Version 14 published to the mock agent configuration.
+            Version {latestPublished.versionNumber} published to the agent configuration.
           </div>
         )}
       </div>
@@ -126,45 +268,79 @@ export function AgentPromptStudio() {
           </p>
         </div>
         <div className="divide-y">
-          {versions.map((item) => (
+          <button
+            onClick={() => setSelectedVersionId('draft')}
+            className={cn(
+              'w-full p-4 text-left hover:bg-muted/50',
+              selectedVersionId === 'draft' && 'bg-muted/50',
+            )}
+          >
+            <div className="flex justify-between">
+              <span className="text-sm font-medium">Draft</span>
+              <Badge variant={hasUnsavedChanges ? 'warning' : 'neutral'}>
+                {hasUnsavedChanges ? 'Unsaved' : 'Current'}
+              </Badge>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              The editable configuration. Publish to snapshot it.
+            </p>
+          </button>
+          {versions.map((version) => (
             <button
-              onClick={() => {
-                setSelected(item.id);
-                setPublished(item.status === 'Published');
-              }}
+              onClick={() => setSelectedVersionId(version.versionId)}
               className={cn(
                 'w-full p-4 text-left hover:bg-muted/50',
-                selected === item.id && 'bg-muted/50',
+                selectedVersionId === version.versionId && 'bg-muted/50',
               )}
-              key={item.id}
+              key={version.versionId}
             >
               <div className="flex justify-between">
-                <span className="font-medium text-sm">{item.label}</span>
-                <Badge variant={item.status === 'Published' ? 'success' : 'warning'}>
-                  {item.status}
-                </Badge>
+                <span className="text-sm font-medium">v{version.versionNumber}</span>
+                <Badge variant="success">Published</Badge>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">{item.note}</p>
-              <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock3 size={12} />
-                {item.time}
-              </p>
+              {version.legacyLabel && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Legacy label: {version.legacyLabel}
+                </p>
+              )}
             </button>
           ))}
+          {versions.length === 0 && (
+            <p className="p-4 text-xs text-muted-foreground">
+              No published versions yet — publish the draft to create the first one.
+            </p>
+          )}
         </div>
         <div className="p-3">
-          <Button variant="outline" className="w-full" onClick={() => setPublished(false)}>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={rollbackToSelected}
+            disabled={!selectedVersion || rollback.isPending}
+          >
             <RotateCcw size={15} className="mr-2" />
-            Rollback to selected
+            {selectedVersion
+              ? `Roll back draft to v${selectedVersion.versionNumber}`
+              : 'Select a published version to roll back'}
           </Button>
         </div>
       </aside>
     </div>
   );
 }
-function PromptBlock({ title, muted = false }: { title: string; muted?: boolean }) {
+function PromptBlock({
+  title,
+  value,
+  editable,
+  onChange,
+}: {
+  title: string;
+  value: string;
+  editable: boolean;
+  onChange?: (value: string) => void;
+}) {
   return (
-    <div className={cn('p-5', muted && 'bg-muted/20')}>
+    <div className={cn('p-5', !editable && 'bg-muted/20')}>
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm font-medium">{title}</span>
         <SplitSquareHorizontal size={16} className="text-muted-foreground" />
@@ -173,12 +349,9 @@ function PromptBlock({ title, muted = false }: { title: string; muted?: boolean 
         Behavior contract
         <textarea
           className="input mt-2 min-h-48 resize-y"
-          defaultValue={
-            muted
-              ? 'Ask relevant discovery questions, confirm company size, and then offer a calendar slot.'
-              : 'Ask one discovery question at a time. Confirm the caller’s role, team size, and use case before offering a next step. Never make product guarantees.'
-          }
-          readOnly={muted}
+          value={value}
+          onChange={(event) => onChange?.(event.target.value)}
+          readOnly={!editable}
         />
       </label>
       <div className="mt-4 rounded-md bg-muted p-3 text-xs text-muted-foreground">

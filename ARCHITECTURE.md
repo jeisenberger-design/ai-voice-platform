@@ -9,14 +9,16 @@ For product vision and behavioral ground rules, see `CLAUDE.md` and
 `documentation/project-constitution.md`. For the Conversation Runtime's design record
 (the decisions, not just the current shape), see
 `documentation/conversation-runtime-design.md`. For the Agent data model's design
-record, see `documentation/agent-model-design.md` — **approved; Phase 1 of its implementation
-plan has landed** (`lib/agent-model.ts`, `lib/agent-repository.ts`,
-`lib/agent-migration.ts` — canonical types, a versioned draft/publish repository, and
-a one-time fixture migration, all tested). Today's `Agent` type (`lib/mock-data.ts`)
-still remains the only Agent-related model the execution engine and every UI screen
-actually read — Phase 1 added the persistence layer but wired nothing to it yet; that's
-Phases 2 (runtime provenance) and 3 (screen wiring). This file is the map; those are
-the minutes of the meetings where the map was drawn.
+record, see `documentation/agent-model-design.md` — **approved; Phases 1–3B of its
+implementation plan have landed** (`lib/agent-model.ts`, `lib/agent-repository.ts`,
+`lib/agent-migration.ts`, `lib/agent-publish.ts` — canonical types, a versioned
+draft/publish repository, publish/rollback orchestration, and a one-time fixture
+migration, all tested). Every Agent configuration screen — Configuration, Prompt
+Studio, Knowledge, Tools, Testing, and Versions — now reads and writes the same
+canonical `AgentRepository` draft/version state by explicit `agentId`; `lib/mock-data.ts`'s
+legacy `Agent` fixture remains only for display fields the canonical model doesn't have
+yet (e.g. `workflow-detail.tsx`'s agent names), not as a configuration source. This file
+is the map; those are the minutes of the meetings where the map was drawn.
 
 ## Scope
 
@@ -297,8 +299,10 @@ not just those per-node events, precisely because a node that's never visited ne
 emits one. A projection can recover this from the event stream alone, without
 consulting `AgentRepository` (mutable, forward-moving) or the live draft. `Agent`'s ten
 legacy fixture fields (`lib/mock-data.ts`) are **not** what `AgentRuntime` resolves
-through anymore; that fixture remains read by UI screens only, not yet migrated
-(Phase 3).
+through anymore; every Agent *configuration* screen now reads/writes the canonical
+repository instead (Phase 3A/3B, below) — the fixture remains read only by
+`workflow-detail.tsx`, `tool-detail.tsx`, and the dashboard page, for display fields
+the canonical model doesn't carry, which were never in the Agent Model plan's scope.
 
 ## Presentation
 
@@ -446,6 +450,37 @@ and what's not built yet.
   schema. `lib/mock-data.ts`'s `agents` fixture is untouched and still read directly by
   `workflow-detail.tsx`, `tool-detail.tsx`, and the dashboard page — none of those were
   in scope.
+- **Agent Model (Phase 3B — canonical configuration path complete)** — every remaining
+  Agent configuration screen now reads/writes the Phase 1 repository. `agent-prompt-studio.tsx`
+  takes an explicit `agentId` prop (no more independent local state) and edits the same
+  draft as the Configuration tab, using the same explicit-save staging Phase 3A
+  established; its 8-section authoring vocabulary maps onto the canonical 14
+  `InstructionSection`s per `agent-model-implementation-plan.md` §11's documented
+  mapping. The standalone `/prompt-studio` route is now an Agent-selection launcher —
+  it holds only the current selection, never prompt state, and never defaults to an
+  implicit first agent. `structured-editor.tsx`'s Knowledge/Tools free-text sections
+  join the other 7 on the canonical draft, retiring `stores/agent-builder-store.ts`
+  entirely (deleted, not just narrowed — its removal condition from Phase 3A is now
+  met). The top-level Knowledge/Tools tabs (`agent-detail-workspace.tsx`) now read/write
+  `Agent.knowledgeSourceIds`/`toolIds` — the *capability* lists, referenced by the
+  stable ids `lib/mock-data.ts`'s `sources` and `lib/mock-tools.ts`'s `tools` already
+  carry, distinct from the free-text policy sections of the same name inside
+  Configuration. Publishing (`lib/agent-publish.ts`'s `publishAgentDraft`) validates the
+  draft before ever calling `repository.publish`, so a failed publish creates no
+  version at all. The Versions tab reads real `AgentRepository.listVersions` history
+  (no more hardcoded rows); editing/publishing/rollback stay concentrated on Prompt
+  Studio as the one canonical editing surface, per the design doc's own §5 decision.
+  Rollback (`rollbackDraftToVersion`) copies an immutable version's full config into the
+  draft without mutating it — a later explicit publish is required to snapshot the
+  rolled-back draft as a new version. `AgentTestingPanel` now explicitly resolves
+  `getPublishedVersion(agentId)` itself before allowing a test to start (gating on, and
+  displaying, the same published `AgentVersion` the runtime pins per Phase 2 — see
+  "Runtime provenance and version pinning" above), with an honest empty state when an
+  agent has never been published; it deliberately does not add a "test the draft" mode,
+  since that would require overriding Phase 2's pinning resolution, which stays
+  unchanged. `lib/mock-data.ts`'s `agents` fixture is still read directly by
+  `workflow-detail.tsx`, `tool-detail.tsx`, and the dashboard page — unrelated Calls/
+  dashboard/workflow-detail migrations, explicitly out of this phase's scope.
 
 ## Known architectural debt
 

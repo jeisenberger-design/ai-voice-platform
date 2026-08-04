@@ -23,8 +23,15 @@ import { AgentPromptStudio } from '@/components/agent-prompt-studio';
 import { AgentTestingPanel } from '@/components/agent-testing-panel';
 import { StructuredEditor } from '@/components/structured-editor';
 import { validateAgentConfig } from '@/lib/agent-validation';
-import { useAgent, useAgentDraft, useUpdateAgentDraft } from '@/hooks/use-agent-data';
-import type { Agent, InstructionSection } from '@/lib/agent-model';
+import {
+  useAgent,
+  useAgentDraft,
+  useAgentVersions,
+  useUpdateAgentDraft,
+} from '@/hooks/use-agent-data';
+import type { Agent, AgentVersionConfig, InstructionSection } from '@/lib/agent-model';
+import { sources } from '@/lib/mock-data';
+import { tools } from '@/lib/mock-tools';
 import { cn } from '@/lib/utils';
 
 const tabs = [
@@ -195,16 +202,19 @@ export function AgentDetailWorkspace({ agentId }: { agentId: string }) {
           <AgentValidationSummary instructions={mergedInstructions} />
           <StructuredEditor
             sections={configSections}
-            agentId={agentId}
             instructions={mergedInstructions}
             onChangeSection={setSectionValue}
           />
         </>
       )}{' '}
-      {tab === 'Prompt Studio' && <AgentPromptStudio />} {tab === 'Knowledge' && <KnowledgePanel />}{' '}
-      {tab === 'Tools' && <ToolsPanel />}{' '}
+      {tab === 'Prompt Studio' && <AgentPromptStudio agentId={agentId} />}{' '}
+      {tab === 'Knowledge' && <KnowledgePanel agentId={agentId} />}{' '}
+      {tab === 'Tools' && <ToolsPanel agentId={agentId} />}{' '}
       {tab === 'Testing' && <AgentTestingPanel agentId={agentId} />}{' '}
-      {tab === 'Versions' && <VersionsPanel />} {tab === 'Analytics' && <AnalyticsPanel />}
+      {tab === 'Versions' && (
+        <VersionsPanel agentId={agentId} onOpenPromptStudio={() => setTab('Prompt Studio')} />
+      )}{' '}
+      {tab === 'Analytics' && <AnalyticsPanel />}
     </>
   );
 }
@@ -296,7 +306,26 @@ function Overview({ agent, onConfigure }: { agent: Agent; onConfigure: () => voi
     </div>
   );
 }
-function KnowledgePanel() {
+// Knowledge-source *capability* — which sources this agent may use at all
+// (Agent.knowledgeSourceIds), distinct from the free-text "Knowledge" policy section
+// inside Configuration (draft.instructions.Knowledge). References are stable source
+// ids (lib/mock-data.ts's `sources[].id`), never names, so renaming a source's display
+// name never breaks an agent's reference to it. Toggles write immediately — an on/off
+// capability list, unlike the free-text sections, doesn't need explicit-save staging.
+function KnowledgePanel({ agentId }: { agentId: string }) {
+  const { data: draft } = useAgentDraft(agentId);
+  const updateDraft = useUpdateAgentDraft(agentId);
+  if (!draft) {
+    return (
+      <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">Loading…</div>
+    );
+  }
+  const toggle = (sourceId: string) => {
+    const next = draft.knowledgeSourceIds.includes(sourceId)
+      ? draft.knowledgeSourceIds.filter((id) => id !== sourceId)
+      : [...draft.knowledgeSourceIds, sourceId];
+    updateDraft.mutate({ knowledgeSourceIds: next });
+  };
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
       <Card className="p-5">
@@ -304,118 +333,202 @@ function KnowledgePanel() {
           <div>
             <h2 className="font-medium">Connected knowledge</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Sources available to Avery during calls.
+              Sources this agent is permitted to use during calls.
             </p>
           </div>
-          <Button variant="outline">Manage sources</Button>
         </div>
         <div className="mt-5 divide-y">
-          {[
-            ['Customer onboarding guide.pdf', '84 chunks · synced today'],
-            ['Pricing FAQ.docx', '42 chunks · synced Jul 9'],
-            ['Support knowledge base', '312 chunks · live sync'],
-          ].map(([name, meta]) => (
-            <div className="flex items-center gap-3 py-4" key={name}>
-              <div className="grid size-9 place-items-center rounded-md bg-muted">
-                <FileText size={16} />
+          {sources.map((source) => {
+            const enabled = draft.knowledgeSourceIds.includes(source.id);
+            return (
+              <div className="flex items-center gap-3 py-4" key={source.id}>
+                <div className="grid size-9 place-items-center rounded-md bg-muted">
+                  <FileText size={16} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{source.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {source.chunks} chunks · {source.updated}
+                  </p>
+                </div>
+                <button
+                  aria-label={`Toggle ${source.name}`}
+                  onClick={() => toggle(source.id)}
+                  className={cn(
+                    'h-6 w-11 rounded-full p-0.5 transition-colors',
+                    enabled ? 'bg-foreground' : 'bg-muted',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'block size-5 rounded-full bg-background transition-transform',
+                      enabled && 'translate-x-5',
+                    )}
+                  />
+                </button>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">{name}</p>
-                <p className="text-xs text-muted-foreground">{meta}</p>
-              </div>
-              <Badge variant="success">Available</Badge>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
       <Card className="p-5">
         <BrainCircuit size={20} />
         <h2 className="mt-3 font-medium">Retrieval policy</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Avery cites grounded workspace knowledge and asks a clarifying question when context is
-          insufficient.
+          {draft.instructions.Knowledge ||
+            'No knowledge policy configured yet — set one in Configuration → Knowledge.'}
         </p>
       </Card>
     </div>
   );
 }
-function ToolsPanel() {
-  const [tools, setTools] = useState<Array<[string, boolean]>>([
-    ['Calendar availability', true],
-    ['CRM lookup', true],
-    ['Create lead', true],
-    ['Send follow-up', false],
-  ]);
+// Tool *capability* — which tools this agent may reach for (Agent.toolIds), referenced
+// by lib/mock-tools.ts's stable tool ids, distinct from the free-text "Tools" policy
+// section inside Configuration. Same immediate-write reasoning as KnowledgePanel above.
+function ToolsPanel({ agentId }: { agentId: string }) {
+  const { data: draft } = useAgentDraft(agentId);
+  const updateDraft = useUpdateAgentDraft(agentId);
+  if (!draft) {
+    return (
+      <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">Loading…</div>
+    );
+  }
+  const toggle = (toolId: string) => {
+    const next = draft.toolIds.includes(toolId)
+      ? draft.toolIds.filter((id) => id !== toolId)
+      : [...draft.toolIds, toolId];
+    updateDraft.mutate({ toolIds: next });
+  };
   return (
     <Card className="p-5">
       <div>
         <h2 className="font-medium">Agent tools</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Grant focused abilities and define when Avery can use them.
+          Grant focused abilities this agent may reach for.
         </p>
       </div>
       <div className="mt-5 divide-y">
-        {tools.map(([name, enabled], index) => (
-          <div className="flex items-center gap-4 py-4" key={name}>
-            <div className="grid size-9 place-items-center rounded-md bg-muted">
-              <Wrench size={16} />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium">{name}</p>
-              <p className="text-xs text-muted-foreground">
-                Available after the relevant caller intent is confirmed.
-              </p>
-            </div>
-            <button
-              aria-label={`Toggle ${name}`}
-              onClick={() =>
-                setTools((items) =>
-                  items.map((tool, i) => (i === index ? [tool[0], !tool[1]] : tool)),
-                )
-              }
-              className={cn(
-                'h-6 w-11 rounded-full p-0.5 transition-colors',
-                enabled ? 'bg-foreground' : 'bg-muted',
-              )}
-            >
-              <span
+        {tools.map((tool) => {
+          const enabled = draft.toolIds.includes(tool.id);
+          return (
+            <div className="flex items-center gap-4 py-4" key={tool.id}>
+              <div className="grid size-9 place-items-center rounded-md bg-muted">
+                <Wrench size={16} />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">{tool.name}</p>
+                <p className="text-xs text-muted-foreground">{tool.description}</p>
+              </div>
+              <button
+                aria-label={`Toggle ${tool.name}`}
+                onClick={() => toggle(tool.id)}
                 className={cn(
-                  'block size-5 rounded-full bg-background transition-transform',
-                  enabled && 'translate-x-5',
+                  'h-6 w-11 rounded-full p-0.5 transition-colors',
+                  enabled ? 'bg-foreground' : 'bg-muted',
                 )}
-              />
-            </button>
-          </div>
-        ))}
+              >
+                <span
+                  className={cn(
+                    'block size-5 rounded-full bg-background transition-transform',
+                    enabled && 'translate-x-5',
+                  )}
+                />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
 }
-function VersionsPanel() {
+// Real canonical version history (AgentRepository.listVersions), not a fixture — see
+// agent-model-implementation-plan.md Phase 3B requirement 6. Editing, publishing, and
+// rollback all stay on Prompt Studio (the one canonical editing surface); this panel is
+// a read-only durable record, linking there for anything that mutates the draft.
+function VersionsPanel({
+  agentId,
+  onOpenPromptStudio,
+}: {
+  agentId: string;
+  onOpenPromptStudio: () => void;
+}) {
+  const { data: draft } = useAgentDraft(agentId);
+  const { data: versions = [] } = useAgentVersions(agentId);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   return (
     <Card className="overflow-hidden">
-      <div className="border-b p-5">
-        <h2 className="font-medium">Agent versions</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A durable record of published agent behavior.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
+        <div>
+          <h2 className="font-medium">Agent versions</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A durable record of published agent behavior. Edit, publish, and roll back from Prompt
+            Studio.
+          </p>
+        </div>
+        <Button variant="outline" onClick={onOpenPromptStudio}>
+          Open Prompt Studio
+        </Button>
       </div>
       <div className="divide-y">
-        {[
-          ['v14', 'Current draft', 'Edited just now', 'Not published'],
-          ['v13', 'Published', 'Jul 14, 2026', 'Discovery flow refined'],
-          ['v12', 'Published', 'Jul 8, 2026', 'Initial baseline'],
-        ].map(([version, status, time, detail]) => (
-          <div className="flex flex-wrap items-center gap-4 p-5" key={version}>
-            <span className="font-medium">{version}</span>
-            <Badge variant={status === 'Published' ? 'success' : 'warning'}>{status}</Badge>
-            <span className="flex-1 text-sm text-muted-foreground">{detail}</span>
-            <span className="text-xs text-muted-foreground">{time}</span>
-            <Button variant="outline">View</Button>
+        {draft && (
+          <div className="p-5">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="font-medium">Draft</span>
+              <Badge variant="warning">Not published</Badge>
+              <span className="flex-1 text-sm text-muted-foreground">
+                The currently editable configuration.
+              </span>
+              <Button variant="outline" onClick={() => toggleExpand('draft')}>
+                {expanded.has('draft') ? 'Hide' : 'View'}
+              </Button>
+            </div>
+            {expanded.has('draft') && <VersionSnapshot config={draft} />}
+          </div>
+        )}
+        {versions.map((version) => (
+          <div className="p-5" key={version.versionId}>
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="font-medium">v{version.versionNumber}</span>
+              <Badge variant="success">Published</Badge>
+              {version.legacyLabel && (
+                <span className="text-xs text-muted-foreground">legacy {version.legacyLabel}</span>
+              )}
+              <span className="flex-1 text-sm text-muted-foreground">
+                {version.voice ? `${version.voice} voice` : 'No voice set'}
+              </span>
+              <Button variant="outline" onClick={() => toggleExpand(version.versionId)}>
+                {expanded.has(version.versionId) ? 'Hide' : 'View'}
+              </Button>
+            </div>
+            {expanded.has(version.versionId) && <VersionSnapshot config={version} />}
           </div>
         ))}
+        {versions.length === 0 && (
+          <div className="p-5 text-sm text-muted-foreground">
+            No published versions yet — publish from Prompt Studio to create the first one.
+          </div>
+        )}
       </div>
     </Card>
+  );
+}
+function VersionSnapshot({ config }: { config: AgentVersionConfig }) {
+  return (
+    <div className="mt-4 grid gap-3 rounded-md bg-muted/40 p-4 text-sm sm:grid-cols-2">
+      {(['Identity', 'Personality', 'Guardrails', 'Output Schema'] as const).map((section) => (
+        <div key={section}>
+          <p className="text-xs font-medium text-muted-foreground">{section}</p>
+          <p className="mt-1 line-clamp-3 text-sm">{config.instructions[section] || '—'}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 function AnalyticsPanel() {

@@ -4,7 +4,7 @@ import { Construction, Mic, Phone, PhoneOff, Play, Send, Sparkles } from 'lucide
 import { Button, Card, Badge } from '@/components/ui';
 import { testScenarios, type TestScenario } from '@/lib/test-scenarios';
 import { useWorkflows } from '@/hooks/use-platform-data';
-import { useAgents } from '@/hooks/use-agent-data';
+import { useAgent, useAgentPublishedVersion } from '@/hooks/use-agent-data';
 import {
   ExecutionRecorder,
   nextRunId,
@@ -28,9 +28,24 @@ type SessionControl = { submit: (text: string) => void; cancel: () => void };
 // "Run test" uses on a workflow (via the same shared runConversationSession envelope),
 // not a second engine.
 export function AgentTestingPanel({ agentId }: { agentId: string }) {
-  const { data: agents } = useAgents();
+  const { data: agent } = useAgent(agentId);
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
-  const agent = agents?.find((item) => item.agentId === agentId);
+  // Explicitly resolved here — for display and gating only — so the panel can show a
+  // truthful empty state before starting a session rather than letting
+  // runConversationSession's own resolution (Phase 2, unchanged) fail after the user
+  // has already clicked Start. The runtime still does its own resolution independently
+  // at session start (see runConversationSession/resolveRunProvenance in
+  // lib/conversation-runtime.ts) — both reads hit the same repository, so they agree
+  // unless a publish lands in the narrow gap between them, which is the same
+  // publish-during-session race every other caller of that function already tolerates.
+  //
+  // Deliberately not offering a "test the current draft" mode: doing so would mean
+  // threading a pinned-version override through runConversationSession/
+  // resolveRunProvenance, which Phase 2's pinning is explicitly documented as not
+  // supporting today. Testing here always means the same published AgentVersion the
+  // real runtime would pin — never a silently-substituted "latest" or draft — see
+  // documentation/agent-model-implementation-plan.md Phase 3B requirement 7.
+  const { data: publishedVersion, isLoading: versionLoading } = useAgentPublishedVersion(agentId);
   const workflow = workflows?.find((item) => item.agentIds.includes(agentId));
 
   const [status, setStatus] = useState<Status>('idle');
@@ -115,7 +130,7 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
     setDraft('');
   };
 
-  if (workflowsLoading)
+  if (workflowsLoading || versionLoading)
     return (
       <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">Loading…</div>
     );
@@ -135,6 +150,22 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
     );
   }
 
+  if (!publishedVersion) {
+    return (
+      <Card className="grid min-h-72 place-items-center p-8 text-center">
+        <div>
+          <Construction className="mx-auto text-muted-foreground" size={28} />
+          <h2 className="mt-3 font-medium">Not published yet</h2>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            {(agent?.name ?? 'This agent') +
+              ' has no published version. Testing pins a specific published AgentVersion at' +
+              ' session start, so publish it from Prompt Studio before testing.'}
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card className="overflow-hidden">
       <div className="flex items-center justify-between border-b p-5">
@@ -144,9 +175,12 @@ export function AgentTestingPanel({ agentId }: { agentId: string }) {
             Runs a real test consultation against {workflow.name}. No calls are placed.
           </p>
         </div>
-        <Badge variant={status === 'active' ? 'success' : 'neutral'}>
-          {status === 'active' ? 'Live simulation' : 'Ready'}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="neutral">Testing v{publishedVersion.versionNumber}</Badge>
+          <Badge variant={status === 'active' ? 'success' : 'neutral'}>
+            {status === 'active' ? 'Live simulation' : 'Ready'}
+          </Badge>
+        </div>
       </div>
 
       {status === 'idle' && (

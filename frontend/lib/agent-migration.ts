@@ -9,13 +9,19 @@
 
 import { agents as legacyAgents } from '@/lib/mock-data';
 import { workflows } from '@/lib/mock-workflows';
-import type { AgentBuilderConfig } from '@/stores/agent-builder-store';
-import type { Agent, AgentVersion, AgentVersionConfig } from '@/lib/agent-model';
+import type {
+  Agent,
+  AgentVersion,
+  AgentVersionConfig,
+  InstructionSection,
+} from '@/lib/agent-model';
 
-// `AgentBuilderConfig`'s one shared default — every fixture agent seeds from the same
-// section text today (createBuilderStore never varied it per agentId), so migrating
-// "each agent's saved text" and "the shared default" are the same operation.
-const defaultSections: AgentBuilderConfig['sections'] = {
+// The one shared default section text — every fixture agent seeds from the same text
+// today, so migrating "each agent's saved text" and "the shared default" are the same
+// operation. Previously sourced from the now-removed stores/agent-builder-store.ts
+// (Phase 3B deleted it once Knowledge/Tools migrated onto the canonical draft); this is
+// the same literal content, now owned directly by the migration that actually uses it.
+const defaultSections: Record<InstructionSection, string> = {
   Identity: 'You are Avery, a helpful sales development agent for Acme Healthcare.',
   Description: 'A concise overview of what this agent is responsible for.',
   Purpose: 'Qualify inbound leads and schedule a discovery call when there is a fit.',
